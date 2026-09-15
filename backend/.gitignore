@@ -1,0 +1,10 @@
+# Created by venv; see https://docs.python.org/3/library/venv.html
+# Environment variables 
+.env
+.env.local
+
+# Python virtual environment
+venv/
+.venv/
+env/
+

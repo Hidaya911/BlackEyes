@@ -1,0 +1,23 @@
+body {
+  background-color: #f4f4f5;
+  color: #111827;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+.bg-dark-custom {
+  background-color: #0b0f19;
+}
+
+.text-cyan-custom {
+  color: #00d2ff;
+}
+
+.text-magenta-custom {
+  color: #ff007f;
+}
+
+.text-yellow-custom {
+  color: #ffe600;
+}
