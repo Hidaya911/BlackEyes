@@ -1,0 +1,313 @@
+.vendor-ledger {
+  margin-top: 32px;
+  padding: 28px;
+  border: 1px solid #e0e8f0;
+  border-radius: 24px;
+  background: linear-gradient(155deg, #fff, #f8fbfe);
+  box-shadow: 0 12px 35px #15345208;
+}
+
+.ledger-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.ledger-heading h2 {
+  font-size: 26px;
+  font-weight: 750;
+  letter-spacing: -0.8px;
+}
+
+.ledger-heading p {
+  margin: 8px 0 0;
+  color: #708095;
+  font-size: 13px;
+}
+
+.ledger-toolbar {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.ledger-toolbar label {
+  flex: 1;
+  min-width: 170px;
+}
+
+.ledger-toolbar label > span,
+.ledger-field > span {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 12px;
+  font-weight: 650;
+  color: #344b62;
+}
+
+.ledger-toolbar .form-select,
+.ledger-field .form-select {
+  padding: 11px 32px 11px 12px;
+  border-color: #dbe3ed;
+  border-radius: 10px;
+}
+
+.ledger-totals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 15px;
+}
+
+.ledger-totals article {
+  display: grid;
+  gap: 10px;
+  padding: 24px;
+  border: 1px solid #e0e9f2;
+  border-radius: 18px;
+  background: white;
+}
+
+.ledger-totals svg {
+  color: #25879a;
+  font-size: 20px;
+}
+
+.ledger-totals span {
+  color: #6f8194;
+  font-size: 12px;
+}
+
+.ledger-totals strong {
+  color: #233c53;
+  font-size: clamp(20px, 2vw, 28px);
+  overflow-wrap: anywhere;
+}
+
+.ledger-totals .ledger-balance {
+  background: linear-gradient(120deg, #122a42, #244660);
+  border-color: transparent;
+}
+
+.ledger-balance svg,
+.ledger-balance span {
+  color: #9edce7;
+}
+
+.ledger-balance strong {
+  color: white;
+}
+
+.ledger-currency {
+  color: #728498;
+  margin: 12px 0 22px;
+  font-size: 11px;
+}
+
+.ledger-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #e2eaf2;
+  border-radius: 16px;
+  background: white;
+}
+
+.ledger-table {
+  min-width: 780px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.ledger-table th {
+  background: #eef4f9;
+  color: #61758b;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  padding: 16px;
+}
+
+.ledger-table td {
+  padding: 18px 16px;
+  border-color: #eef2f7;
+  max-width: 260px;
+  overflow-wrap: anywhere;
+}
+
+.ledger-table td strong,
+.ledger-table td small {
+  display: block;
+}
+
+.ledger-table small {
+  margin-top: 5px;
+  color: #76869a;
+}
+
+.ledger-status {
+  display: inline-block;
+  padding: 6px 9px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  text-transform: capitalize;
+}
+
+.ledger-status-paid {
+  background: #e5f7ee;
+  color: #23734f;
+}
+
+.ledger-status-partial {
+  background: #fff2dc;
+  color: #8a6020;
+}
+
+.ledger-status-unpaid {
+  background: #ffeaf0;
+  color: #aa3b59;
+}
+
+.ledger-payment-button {
+  color: #26687f;
+  background: #ecf6fa;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.ledger-payment-button:hover {
+  color: #174457;
+  background: #d9edf5;
+}
+
+.ledger-inventory {
+  margin-top: 22px;
+  padding: 20px;
+  border-radius: 16px;
+  border: 1px solid #e0e8f0;
+  background: white;
+}
+
+.ledger-inventory summary {
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  color: #38556f;
+}
+
+.ledger-inventory summary span {
+  margin-left: 12px;
+  font-size: 11px;
+  font-weight: 400;
+  color: #788b9c;
+}
+
+.ledger-stock-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.ledger-stock-grid article {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  border-radius: 12px;
+  background: #f5f8fc;
+  overflow-wrap: anywhere;
+}
+
+.ledger-stock-grid article > span {
+  font-size: 10px;
+  color: #658293;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.ledger-stock-grid p {
+  margin: 0;
+  font-size: 18px;
+}
+
+.ledger-stock-grid small {
+  font-size: 11px;
+}
+
+.ledger-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.ledger-field-wide {
+  grid-column: 1 / -1;
+}
+
+.ledger-purchase-preview {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 18px 20px;
+  margin: 22px 0 14px;
+  border-radius: 14px;
+  color: #577185;
+  background: #eef7fa;
+  font-size: 12px;
+}
+
+.ledger-purchase-preview strong {
+  display: block;
+  font-size: 22px;
+  color: #183e54;
+  margin-top: 4px;
+}
+
+.ledger-payment-history {
+  display: grid;
+  gap: 10px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.ledger-payment-history article {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  border-left: 3px solid #39ad98;
+  border-radius: 8px;
+  background: #f5faf9;
+  overflow-wrap: anywhere;
+}
+
+.ledger-payment-history span,
+.ledger-payment-history small {
+  color: #6b8090;
+  font-size: 12px;
+}
+
+.ledger-settle-form {
+  border-top: 1px solid #e4ebf3;
+  margin-top: 24px;
+  padding-top: 20px;
+}
+
+@media (max-width: 900px) {
+  .ledger-totals {
+    grid-template-columns: 1fr;
+  }
+
+  .vendor-ledger {
+    padding: 18px;
+  }
+}
+
+@media (max-width: 575px) {
+  .ledger-form-grid {
+    grid-template-columns: 1fr;
+  }
+}

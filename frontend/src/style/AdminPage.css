@@ -1,0 +1,271 @@
+.admin-topbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 28px;
+  padding: 20px 24px;
+  border: 1px solid #fff;
+  border-radius: 20px;
+  background: linear-gradient(115deg, #ffffff, #f9fcff 65%, #f7f3fb);
+  box-shadow: 0 8px 30px #19375408;
+}
+
+.admin-heading {
+  flex: 1;
+  min-width: 170px;
+}
+
+.admin-wordmark {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #294359;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  white-space: nowrap;
+}
+
+.admin-wordmark > span:last-child {
+  color: #788799;
+  font-weight: 500;
+}
+
+.admin-print-dots {
+  display: flex;
+  gap: 3px;
+}
+
+.admin-print-dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #00b8da;
+}
+
+.admin-print-dots i:nth-child(2) {
+  background: #ed438d;
+}
+
+.admin-print-dots i:nth-child(3) {
+  background: #eabf36;
+}
+
+.admin-section-name {
+  margin-top: 7px;
+  color: #182a40;
+  font-size: 23px;
+  font-weight: 700;
+  letter-spacing: -0.7px;
+}
+
+.admin-section-search {
+  position: relative;
+  flex: 0 1 340px;
+  min-width: 180px;
+}
+
+.admin-section-search form {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  background: #eef3f8;
+  border: 1px solid #e5ebf2;
+  border-radius: 12px;
+  color: #6c8197;
+}
+
+.admin-section-search form:focus-within {
+  border-color: #63b8cc;
+  box-shadow: 0 0 0 3px #1bbad512;
+  background: white;
+}
+
+.admin-section-search input {
+  width: 100%;
+  min-width: 0;
+  outline: none;
+  border: 0;
+  background: transparent;
+  color: #233a50;
+  font-size: 12px;
+}
+
+.admin-search-hint {
+  padding: 0 5px;
+  border: 1px solid #d7e1eb;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.admin-search-results {
+  position: absolute;
+  z-index: 1020;
+  top: calc(100% + 10px);
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #e6edf4;
+  border-radius: 16px;
+  background: white;
+  box-shadow: 0 16px 45px #15293e20;
+}
+
+.admin-menu-caption {
+  display: block;
+  padding: 5px 8px 10px;
+  color: #708196;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+}
+
+.admin-search-results button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: white;
+  color: #344d65;
+  text-align: left;
+  font-size: 12px;
+}
+
+.admin-search-results button:hover,
+.admin-search-results button:focus-visible {
+  background: #edf7fa;
+}
+
+.admin-result-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #f0f5fa;
+  color: #25748b;
+}
+
+.admin-no-results {
+  margin: 8px;
+  font-size: 12px;
+  color: #62768b;
+}
+
+.admin-account {
+  padding-left: 20px;
+  border-left: 1px solid #e3e9f0;
+}
+
+.admin-profile-trigger {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 4px;
+  border: 0;
+  border-radius: 30px;
+}
+
+.admin-profile-trigger::after {
+  display: none;
+}
+
+.admin-profile-trigger:hover,
+.admin-profile-trigger.show {
+  background: #eaf0f7;
+}
+
+.admin-profile-label {
+  display: grid;
+  gap: 3px;
+  max-width: 140px;
+  text-align: left;
+}
+
+.admin-profile-label strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #22384f;
+  font-size: 12px;
+}
+
+.admin-profile-label small {
+  color: #748498;
+  font-size: 10px;
+}
+
+.admin-profile-chevron {
+  margin: 0 6px;
+  font-size: 9px;
+  color: #77889b;
+}
+
+.admin-account-menu {
+  width: 270px;
+  max-width: 85vw;
+  padding: 10px;
+  border: 1px solid #e6edf4;
+  border-radius: 16px;
+  box-shadow: 0 16px 45px #15293e20;
+}
+
+.admin-account-summary {
+  display: grid;
+  gap: 4px;
+  padding: 10px 10px 16px;
+  overflow-wrap: anywhere;
+}
+
+.admin-account-summary .admin-menu-caption {
+  padding: 0 0 4px;
+}
+
+.admin-account-summary strong {
+  font-size: 14px;
+  color: #22384f;
+}
+
+.admin-account-summary > span:last-child {
+  color: #748498;
+  font-size: 12px;
+}
+
+.admin-account-menu .dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.admin-account-menu .admin-logout {
+  color: #bd3654;
+}
+
+.admin-account-menu .dropdown-item:active {
+  color: #183e59;
+  background: #edf7fa;
+}
+
+@media (max-width: 1200px) {
+  .admin-profile-label {
+    display: none;
+  }
+
+  .admin-topbar {
+    gap: 16px;
+    padding: 18px;
+    flex-wrap: wrap;
+  }
+
+  .admin-section-search {
+    order: 3;
+    flex-basis: 100%;
+  }
+}

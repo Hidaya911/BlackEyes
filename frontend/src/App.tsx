@@ -2,20 +2,22 @@ import { useState } from 'react';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './index.css';
 
-import { Navbar } from './components/Navbar';
-import { Hero } from './components/Hero';
-import { FeaturesBar } from './components/FeaturesBar';
-import { Services } from './components/Services';
-import { AboutSection } from './components/AboutSection';
-import { Footer } from './components/Footer';
-import { LoginPage } from './components/Login';
-import { SignupPage } from './components/SignupPage';
+import { Navbar } from './components/home/Navbar';
+import { Hero } from './components/home/Hero';
+import { FeaturesBar } from './components/home/FeaturesBar';
+import { Services } from './components/home/Services';
+import { AboutSection } from './components/home/AboutSection';
+import { Footer } from './components/home/Footer';
+import { LoginPage } from './components/auth/Login';
+import { SignupPage } from './components/auth/SignupPage';
 import type { AuthUser, UserRole } from './api/auth';
-import { AdminPage } from './components/AdminPage';
-import { StaffPage } from './components/StaffPage';
-import { CustomerPage } from './components/CustomerPage';
+import { AdminPage } from './components/admin/AdminPage';
+import { StaffPage } from './components/staff/StaffPage';
+import { CustomerPage } from './components/customer/CustomerPage';
+import { ResetPasswordPage } from './components/auth/ResetPasswordPage';
+import { ForgotPasswordPage } from './components/auth/ForgotPasswordPage';
 
-type Page = 'home' | 'login' | 'signup' | UserRole;
+type Page = 'home' | 'login' | 'signup' | 'forgot' | 'reset' | UserRole;
 
 const STORAGE_KEY = 'blackeyes:page';
 const USER_KEY = 'blackeyes:user';
@@ -23,7 +25,8 @@ const USER_KEY = 'blackeyes:user';
 // Read whatever page the user was last on, so a refresh doesn't bounce them back to home.
 const getInitialPage = (): Page => {
   const stored = sessionStorage.getItem(STORAGE_KEY);
-  return stored === 'login' || stored === 'signup' || stored === 'admin' || stored === 'staff' || stored === 'customer'
+  if (new URLSearchParams(window.location.search).has('reset_token')) return 'reset';
+  return stored === 'login' || stored === 'signup' || stored === 'forgot' || stored === 'admin' || stored === 'staff' || stored === 'customer'
     ? stored
     : 'home';
 };
@@ -42,9 +45,20 @@ export function App() {
 
   const goToLogin = () => navigate('login');
   const goToSignup = () => navigate('signup');
+  const goToForgot = () => navigate('forgot');
   const goToHome = () => navigate('home');
   const handleLogin = (user: AuthUser) => { sessionStorage.setItem(USER_KEY, JSON.stringify(user)); setCurrentUser(user); navigate(user.role); };
-  const logout = () => { sessionStorage.removeItem(USER_KEY); goToHome(); };
+  const logout = () => {
+    void fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined).finally(() => {
+      sessionStorage.removeItem(USER_KEY);
+      setCurrentUser(null);
+      goToLogin();
+    });
+  };
+  const saveCurrentProfile = (user: AuthUser) => {
+    sessionStorage.setItem(USER_KEY, JSON.stringify(user));
+    setCurrentUser(user);
+  };
 
   if (page === 'login') {
     return (
@@ -52,23 +66,26 @@ export function App() {
         onLoginSuccess={handleLogin}
         onNavigateHome={goToHome}
         onNavigateToSignup={goToSignup}
+        onNavigateToForgotPassword={goToForgot}
       />
     );
   }
+  if (page === 'forgot') return <ForgotPasswordPage onLogin={goToLogin} />;
 
   if (page === 'signup') {
     return (
       <SignupPage
-        onSignupSuccess={navigate}
+        onSignupSuccess={handleLogin}
         onNavigateHome={goToHome}
         onNavigateToLogin={goToLogin}
       />
     );
   }
+  if (page === 'reset') return <ResetPasswordPage token={new URLSearchParams(window.location.search).get('reset_token') ?? ''} onLogin={goToLogin} />;
 
   if (page === 'admin') return <AdminPage onNavigateHome={logout} adminId={currentUser?.user_id} user={currentUser} />;
-  if (page === 'staff') return <StaffPage onNavigateHome={goToHome} />;
-  if (page === 'customer') return <CustomerPage onNavigateHome={goToHome} />;
+  if (page === 'staff') return <StaffPage onLogout={logout} onProfileSaved={saveCurrentProfile} />;
+  if (page === 'customer') return <CustomerPage onLogout={logout} onProfileSaved={saveCurrentProfile} />;
 
   return (
     <div className="min-vh-100 d-flex flex-column">
