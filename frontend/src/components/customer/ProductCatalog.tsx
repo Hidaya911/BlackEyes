@@ -11,7 +11,10 @@ import {
   customerMoney,
   type CustomerOrder,
   type CustomerProduct,
+  type DesignDraft,
 } from "../../api/customer";
+import { ItemDesignEditor } from './ItemDesignEditor';
+import { designError, emptyDesign, resizeDesigns } from '../../utils/customerDesigns';
 
 function ProductVisual({
   product,
@@ -50,7 +53,7 @@ interface Props {
   products: CustomerProduct[];
   orders: CustomerOrder[];
   firstName: string;
-  onAdd: (productId: number, quantity: number, specifications: string) => void;
+  onAdd: (productId: number, quantity: number, specifications: string, designs: DesignDraft[]) => string | void;
   onOrders: () => void;
 }
 
@@ -66,6 +69,8 @@ export function ProductCatalog({
   const [selected, setSelected] = useState<CustomerProduct | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [specifications, setSpecifications] = useState("");
+  const [designs, setDesigns] = useState<DesignDraft[]>([emptyDesign(1)]);
+  const [designFailure, setDesignFailure] = useState('');
   const [message, setMessage] = useState("");
   const filtered = useMemo(() => {
     const result = products.filter((product) =>
@@ -81,7 +86,10 @@ export function ProductCatalog({
   function add(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selected) return;
-    onAdd(selected.product_id, quantity, specifications);
+    const failure = designError(quantity, designs);
+    if (failure) { setDesignFailure(failure); return; }
+    const basketFailure = onAdd(selected.product_id, quantity, specifications, designs);
+    if (basketFailure) { setDesignFailure(basketFailure); return; }
     setMessage(`${selected.name} added to your basket.`);
     setSelected(null);
   }
@@ -219,6 +227,8 @@ export function ProductCatalog({
                       setSelected(product);
                       setQuantity(1);
                       setSpecifications("");
+                      setDesigns([emptyDesign(1)]);
+                      setDesignFailure('');
                     }}
                   >
                     <FaPlus /> Customize
@@ -246,6 +256,8 @@ export function ProductCatalog({
         show={!!selected}
         onHide={() => setSelected(null)}
         centered
+        size="lg"
+        scrollable
         contentClassName="customer-modal"
         aria-labelledby="customize-title"
       >
@@ -265,7 +277,7 @@ export function ProductCatalog({
                 step={1}
                 required
                 value={quantity || ""}
-                onChange={(event) => setQuantity(Number(event.target.value))}
+                onChange={(event) => { const next = Number(event.target.value); setQuantity(next); setDesigns(current => resizeDesigns(current, next)); }}
               />
             </label>
             <label className="customer-field mt-3">
@@ -279,6 +291,8 @@ export function ProductCatalog({
                 onChange={(event) => setSpecifications(event.target.value)}
               />
             </label>
+            <ItemDesignEditor quantity={quantity} designs={designs} onChange={setDesigns} />
+            {designFailure && <div className="alert alert-danger mt-3" role="alert">{designFailure}</div>}
             <p className="customer-form-hint mt-2">
               Catalog pricing applies. The press will review your specifications
               before production.

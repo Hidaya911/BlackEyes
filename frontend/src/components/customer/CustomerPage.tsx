@@ -4,11 +4,10 @@ import {
   getCustomerOrders,
   getCustomerProducts,
   getCustomerProfile,
-  getPortalConfig,
   type CartLine,
   type CustomerOrder,
   type CustomerProduct,
-  type PortalConfig,
+  type DesignDraft,
 } from "../../api/customer";
 import {
   CustomerLayout,
@@ -19,6 +18,7 @@ import { CustomerCheckout } from "./CustomerCheckout";
 import { CustomerOrders } from "./CustomerOrders";
 import { CustomerProfile } from "./CustomerProfile";
 import "../../style/CustomerPortal.css";
+import { attachmentError } from '../../utils/customerDesigns';
 
 interface Props {
   onLogout: () => void;
@@ -40,7 +40,9 @@ function loadBasket(userId: number): CartLine[] {
           item.quantity <= 100000 &&
           typeof item.specifications === "string",
       )
-      .slice(0, 30);
+      .slice(0, 30)
+      .map(item => ({ product_id: item.product_id, quantity: item.quantity, specifications: item.specifications,
+        designs: Array.isArray(item.designs) ? item.designs.slice(0, 30).filter((d: DesignDraft) => Number.isInteger(d.quantity) && d.quantity > 0 && typeof d.brief === 'string').map((d: DesignDraft) => ({ quantity: d.quantity, brief: d.brief, upload_name: typeof d.upload_name === 'string' ? d.upload_name : undefined })) : undefined }));
   } catch {
     return [];
   }
@@ -50,10 +52,6 @@ export function CustomerPage({ onLogout, onProfileSaved }: Props) {
   const [profile, setProfile] = useState<AuthUser | null>(null);
   const [products, setProducts] = useState<CustomerProduct[]>([]);
   const [orders, setOrders] = useState<CustomerOrder[]>([]);
-  const [config, setConfig] = useState<PortalConfig>({
-    whish_phone: "",
-    currency: "USD",
-  });
   const [cart, setCart] = useState<CartLine[]>([]);
   const [section, setSection] = useState<CustomerSection>("Explore");
   const [checkout, setCheckout] = useState(false);
@@ -70,14 +68,12 @@ export function CustomerPage({ onLogout, onProfileSaved }: Props) {
       getCustomerProfile(controller.signal),
       getCustomerProducts(controller.signal),
       getCustomerOrders(controller.signal),
-      getPortalConfig(controller.signal),
     ])
-      .then(([user, catalog, history, settings]) => {
+      .then(([user, catalog, history]) => {
         if (controller.signal.aborted) return;
         setProfile(user);
         setProducts(catalog);
         setOrders(history);
-        setConfig(settings);
         setCart(loadBasket(user.user_id));
       })
       .catch((failure: Error) => {
@@ -94,7 +90,7 @@ export function CustomerPage({ onLogout, onProfileSaved }: Props) {
     if (profile)
       sessionStorage.setItem(
         `blackeyes:basket:${profile.user_id}`,
-        JSON.stringify(next),
+        JSON.stringify(next.map(line => ({ ...line, designs: line.designs?.map(({ file, ...design }) => ({ ...design, upload_name: file?.name || design.upload_name })) }))),
       );
   }
 
@@ -102,21 +98,27 @@ export function CustomerPage({ onLogout, onProfileSaved }: Props) {
     productId: number,
     quantity: number,
     specifications: string,
+    designs: DesignDraft[],
   ) {
     const exists = cart.find((line) => line.product_id === productId);
-    updateCart(
-      exists
+    if (exists && exists.quantity + quantity > 100000) return 'Maximum quantity per product is 100,000.';
+    if (!exists && cart.length >= 30) return 'A basket can contain at most 30 different products.';
+    if (exists && (exists.designs?.length ?? 1) + designs.length > 30) return 'Use at most 30 design groups per product.';
+    const next = exists
         ? cart.map((line) =>
             line.product_id === productId
               ? {
                   ...line,
-                  quantity: Math.min(100000, line.quantity + quantity),
+                  quantity: line.quantity + quantity,
                   specifications: specifications || line.specifications,
+                  designs: [...(line.designs?.length ? line.designs : [{ quantity: line.quantity, brief: '' }]), ...designs],
                 }
               : line,
           )
-        : [...cart, { product_id: productId, quantity, specifications }],
-    );
+        : [...cart, { product_id: productId, quantity, specifications, designs }];
+    const failure = attachmentError(next);
+    if (failure) return failure;
+    updateCart(next);
   }
 
   async function refreshCatalog() {
@@ -178,16 +180,8 @@ export function CustomerPage({ onLogout, onProfileSaved }: Props) {
       {section === "My orders" && (
         <CustomerOrders
           orders={orders}
-          config={config}
           onBrowse={() => setSection("Explore")}
           onRefresh={async () => setOrders(await getCustomerOrders())}
-          onUpdated={(saved) =>
-            setOrders((current) =>
-              current.map((order) =>
-                order.order_id === saved.order_id ? saved : order,
-              ),
-            )
-          }
         />
       )}
       {section === "Profile settings" && (
@@ -204,7 +198,6 @@ export function CustomerPage({ onLogout, onProfileSaved }: Props) {
         <CustomerCheckout
           cart={cart}
           products={products}
-          config={config}
           phone={profile.phone ?? ""}
           onChange={updateCart}
           onClose={() => setCheckout(false)}

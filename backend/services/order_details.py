@@ -1,11 +1,12 @@
 from sqlalchemy.orm import Session, defer
-from models import Order, OrderItem, OrderPayment, DesignFile
+from models import Order, OrderItem, OrderPayment, DesignFile, OrderItemDesign
 
 
 def order_response(order: Order, db: Session):
     items = db.query(OrderItem).filter(OrderItem.order_id == order.order_id).order_by(OrderItem.order_item_id).all()
     files = db.query(DesignFile).options(defer(DesignFile.content)).filter(DesignFile.order_id == order.order_id).all()
     payment = db.query(OrderPayment).filter(OrderPayment.order_id == order.order_id).first()
+    designs = db.query(OrderItemDesign).filter(OrderItemDesign.order_item_id.in_([item.order_item_id for item in items])).order_by(OrderItemDesign.design_id).all()
     return {
         "order_id": order.order_id,
         "order_type": order.order_type,
@@ -26,9 +27,12 @@ def order_response(order: Order, db: Session):
             "name": item.product_name, "quantity": item.quantity,
             "unit_price": int(item.unit_price * 100), "subtotal": int(item.subtotal * 100),
             "specifications": item.custom_description,
+            "designs": [{"design_id": design.design_id, "quantity": design.quantity, "brief": design.brief}
+                for design in designs if design.order_item_id == item.order_item_id],
         } for item in items],
         "files": [{
             "file_id": file.file_id, "name": file.original_name,
             "size": file.size, "verification_status": file.verification_status,
+            "design_id": file.design_id,
         } for file in files],
     }

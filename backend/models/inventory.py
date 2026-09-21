@@ -35,7 +35,7 @@ class InventoryTransaction(Base):
     transaction_id = Column(Integer, primary_key=True, autoincrement=True)
     item_id = Column(Integer, ForeignKey("inventory_items.item_id", ondelete="RESTRICT"), nullable=False, index=True)
     purchase_id = Column(Integer, ForeignKey("vendor_purchases.purchase_id", ondelete="RESTRICT"), unique=True, nullable=True)
-    # Order-linked deductions belong to the future orders module.
+    # Set for material usage recorded atomically with an order.
     order_id = Column(Integer, nullable=True)
     movement_type = Column(String(20), nullable=False)
     quantity = Column(Numeric(14, 3), nullable=False)

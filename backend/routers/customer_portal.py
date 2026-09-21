@@ -2,23 +2,25 @@
 
 from decimal import Decimal
 import re
-import os
-from typing import Literal
-from uuid import UUID, uuid4
+import hashlib
+from uuid import uuid4
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from utilities.files import decode_artwork, MAX_TOTAL_FILE_BYTES
 from utilities.database import commit
 from services.order_details import order_response
+from services.inventory import consume_materials
 from services.profiles import profile_response, set_profile_image
 from database import get_db
 from models import CustomerSpecialPrice, DesignFile, JobStatusHistory, Order, OrderItem, OrderPayment, Product, User, UserSession
 from sessions import pwd_context, require_customer
+from schemas.requests.customer_order import OrderRequest
+from models import OrderItemDesign
 
 router = APIRouter(prefix="/api/customer", tags=["Customer portal"])
 
@@ -47,40 +49,6 @@ class PasswordRequest(BaseModel):
     new_password: str = Field(min_length=8, max_length=72)
 
 
-class CartItemRequest(CustomerInput):
-    product_id: int = Field(gt=0)
-    quantity: int = Field(gt=0, le=100000)
-    specifications: str = Field(default="", max_length=2000)
-
-
-class ArtworkRequest(CustomerInput):
-    name: str = Field(min_length=1, max_length=255)
-    data_url: str = Field(max_length=14_000_000)
-
-
-class OrderRequest(CustomerInput):
-    request_key: UUID
-    items: list[CartItemRequest] = Field(min_length=1, max_length=30)
-    files: list[ArtworkRequest] = Field(default_factory=list, max_length=3)
-    design_request_note: str = Field(default="", max_length=4000)
-    contact_phone: str = Field(min_length=3, max_length=50)
-    expected_total: int = Field(ge=0, le=99_999_999_999_999)
-    payment_reference: str = Field(default="", max_length=100)
-    payment_method: Literal["cash", "whish_money"] = "whish_money"
-    payment_timing: Literal["on_order", "after_pickup"] = "on_order"
-
-    @model_validator(mode="after")
-    def design_required(self):
-        if not self.files and not self.design_request_note:
-            raise ValueError("Attach a design file or describe the design you need.")
-        ids = [item.product_id for item in self.items]
-        if len(ids) != len(set(ids)):
-            raise ValueError("Combine quantities for the same product into one cart item.")
-        if self.payment_method == "cash" and self.payment_reference:
-            raise ValueError("A Whish transfer reference cannot be used for a cash order.")
-        return self
-
-
 class TransferRequest(CustomerInput):
     reference: str = Field(min_length=3, max_length=100)
 
@@ -99,7 +67,7 @@ def get_profile(customer: User = Depends(require_customer)):
 
 @router.get("/config")
 def portal_config(customer: User = Depends(require_customer)):
-    return {"whish_phone": os.getenv("WHISH_PHONE", "71293191"), "currency": "USD"}
+    return {"currency": "USD", "payment_methods": ["cash"]}
 
 
 @router.put("/profile")
@@ -152,10 +120,13 @@ def get_orders(customer: User = Depends(require_customer), db: Session = Depends
 def place_order(payload: OrderRequest, customer: User = Depends(require_customer), db: Session = Depends(get_db)):
     # Lock the customer to serialize retries using the same request key.
     db.query(User).filter(User.user_id == customer.user_id).with_for_update().one()
+    fingerprint = hashlib.sha256(payload.model_dump_json(exclude={"request_key"}).encode()).hexdigest()
     previous = db.query(Order).filter(Order.request_key == str(payload.request_key)).first()
     if previous:
         if previous.customer_id != customer.user_id:
             raise HTTPException(status_code=409, detail="Please restart checkout.")
+        if previous.request_fingerprint and previous.request_fingerprint != fingerprint:
+            raise HTTPException(409, "This order was already submitted with different details. Refresh your orders.")
         return order_response(previous, db)
     products = {product.product_id: product for product in db.query(Product).filter(
         Product.product_id.in_([item.product_id for item in payload.items]), Product.status == "active"
@@ -178,41 +149,47 @@ def place_order(payload: OrderRequest, customer: User = Depends(require_customer
     if total > 99_999_999_999_999:
         raise HTTPException(status_code=422, detail="Order total exceeds the supported limit.")
     decoded = [(file.name, *decode_artwork(file.data_url)) for file in payload.files]
-    if sum(len(content) for _, _, content in decoded) > MAX_TOTAL_FILE_BYTES:
+    design_files = {(item.product_id, index): (design.file.name, *decode_artwork(design.file.data_url))
+        for item in payload.items for index, design in enumerate(item.designs) if design.file}
+    if sum(len(content) for _, _, content in [*decoded, *design_files.values()]) > MAX_TOTAL_FILE_BYTES:
         raise HTTPException(status_code=422, detail="Design attachments must total no more than 20 MB.")
-    reference = payload.payment_reference.strip().upper()
-    if reference and len(reference) < 3:
-        raise HTTPException(status_code=422, detail="Enter a valid Whish transfer reference.")
     order = Order(
         customer_id=customer.user_id, total_amount=Decimal(total) / 100,
         contact_phone=payload.contact_phone, customer_name=customer.full_name,
         customer_email=customer.email, design_request_note=payload.design_request_note or None,
         request_key=str(payload.request_key), production_stage="Awaiting review",
+        request_fingerprint=fingerprint,
         payment_method=payload.payment_method, payment_timing=payload.payment_timing,
-        payment_status="paid" if total == 0 else "pending_verification" if reference else "awaiting_payment",
+        payment_status="paid" if total == 0 else "awaiting_payment",
     )
     db.add(order)
     try:
         db.flush()
+        consume_materials(db, order.order_id, payload.items, customer.user_id)
         db.add(JobStatusHistory(order_id=order.order_id, changed_by=customer.user_id, stage="Awaiting review"))
         for item, product, price, subtotal in lines:
-            db.add(OrderItem(
+            order_item = OrderItem(
                 order_id=order.order_id, product_id=product.product_id, product_name=product.name,
                 quantity=item.quantity, unit_price=Decimal(price) / 100,
                 subtotal=Decimal(subtotal) / 100, custom_description=item.specifications or None,
-            ))
+            )
+            db.add(order_item)
+            db.flush()
+            for index, design in enumerate(item.designs):
+                assignment = OrderItemDesign(order_item_id=order_item.order_item_id, quantity=design.quantity, brief=design.brief)
+                db.add(assignment)
+                db.flush()
+                if (item.product_id, index) in design_files:
+                    name, mime, content = design_files[(item.product_id, index)]
+                    db.add(DesignFile(order_id=order.order_id, design_id=assignment.design_id,
+                        file_path=f"orders/{order.order_id}/{uuid4().hex}", original_name=name,
+                        content_type=mime, size=len(content), content=content))
         for name, mime, content in decoded:
             db.add(DesignFile(
                 order_id=order.order_id, file_path=f"orders/{order.order_id}/{uuid4().hex}",
                 original_name=name, content_type=mime, size=len(content), content=content,
             ))
-        if reference and total:
-            db.add(OrderPayment(
-                order_id=order.order_id, amount=Decimal(total) / 100,
-                remaining=Decimal(total) / 100, reference=reference,
-                status="pending_verification", method="whish_money",
-            ))
-        commit(db, "That transfer reference has already been submitted for another order.")
+        commit(db)
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=409, detail="Unable to save this order. Refresh your orders before retrying.")
@@ -221,27 +198,8 @@ def place_order(payload: OrderRequest, customer: User = Depends(require_customer
 
 @router.post("/orders/{order_id}/payment-reference")
 def submit_reference(order_id: int, payload: TransferRequest, customer: User = Depends(require_customer), db: Session = Depends(get_db)):
-    order = db.query(Order).filter(Order.order_id == order_id, Order.customer_id == customer.user_id).with_for_update().first()
-    if not order:
-        raise HTTPException(status_code=404, detail="Order not found.")
-    if order.payment_status != "awaiting_payment":
-        raise HTTPException(status_code=409, detail="This order already has a payment submission.")
-    if order.payment_method != "whish_money":
-        raise HTTPException(status_code=422, detail="This order uses cash payment at the press.")
-    payment = db.query(OrderPayment).filter(OrderPayment.order_id == order_id).first()
-    if payment and (payment.status != "unpaid" or payment.amount != 0):
-        raise HTTPException(status_code=409, detail="This order already has a payment submission.")
-    if payment is None:
-        payment = OrderPayment(order_id=order_id)
-        db.add(payment)
-    payment.amount = order.total_amount
-    payment.remaining = order.total_amount
-    payment.reference = payload.reference.upper()
-    payment.method = "whish_money"
-    payment.status = "pending_verification"
-    order.payment_status = "pending_verification"
-    commit(db, "That transfer reference has already been submitted for another order.")
-    return order_response(order, db)
+    owned_order(order_id, customer, db)
+    raise HTTPException(409, "Online transfers are currently unavailable. Please pay locally at the press.")
 
 
 @router.get("/orders/{order_id}/files/{file_id}")

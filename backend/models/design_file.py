@@ -8,6 +8,7 @@ class DesignFile(Base):
 
     file_id = Column(Integer, primary_key=True, autoincrement=True)
     order_id = Column(Integer, ForeignKey("orders.order_id", ondelete="CASCADE"), nullable=False, index=True)
+    design_id = Column(Integer, ForeignKey("order_item_designs.design_id", ondelete="CASCADE"), nullable=True)
     file_path = Column(String(100), unique=True, nullable=False)
     original_name = Column(String(255), nullable=False)
     content_type = Column(String(50), nullable=False)

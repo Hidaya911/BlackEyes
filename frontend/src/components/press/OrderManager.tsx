@@ -4,6 +4,8 @@ import { FaDownload, FaReceipt, FaSyncAlt } from "react-icons/fa";
 import { customerMoney } from "../../api/customer";
 import type { PressOrder } from "../../api/press";
 import "../../style/OrderManager.css";
+import { DocumentPreview } from './documents/DocumentPreview';
+import { OrderDesignSummary } from '../shared/OrderDesignSummary';
 
 async function request<T>(path = "", options?: RequestInit): Promise<T> {
   const response = await fetch(`/api/press/orders${path}`, options);
@@ -126,10 +128,11 @@ function ReviewOrder({
                 aria-labelledby="press-artwork-heading"
               >
                 <h3 id="press-artwork-heading">Design &amp; artwork</h3>
+                <OrderDesignSummary order={order} audience="press" />
                 <p className="press-design-note">
-                  {order.design_request_note || "See attached artwork."}
+                  {order.design_request_note || (order.items.some(item => item.designs?.length) ? '' : "See attached artwork.")}
                 </p>
-                {order.files.map((file) => (
+                {order.files.filter(file => !file.design_id).map((file) => (
                   <a
                     className="press-file-link"
                     key={file.file_id}
@@ -264,6 +267,7 @@ function ReviewOrder({
 }
 
 export function OrderManager({ onCreate }: { onCreate?: () => void }) {
+  const [document, setDocument] = useState<{ id: number; kind: 'invoice' | 'receipt' } | null>(null);
   const [orders, setOrders] = useState<PressOrder[]>([]);
   const [selected, setSelected] = useState<PressOrder | null>(null);
   const [loading, setLoading] = useState(true);
@@ -360,6 +364,7 @@ export function OrderManager({ onCreate }: { onCreate?: () => void }) {
               >
                 Review order
               </button>
+              <div className="order-document-actions"><button onClick={() => setDocument({ id: order.order_id, kind: 'invoice' })}>Invoice</button><button disabled={order.amount_paid <= 0} title={order.amount_paid <= 0 ? 'Verify a received payment to enable receipts' : 'View receipt'} onClick={() => setDocument({ id: order.order_id, kind: 'receipt' })}>Receipt</button></div>
             </article>
           ))}
         </div>
@@ -367,6 +372,7 @@ export function OrderManager({ onCreate }: { onCreate?: () => void }) {
       {!loading && !error && !visible.length && (
         <p className="text-secondary">No matching orders yet.</p>
       )}
+      {document && <DocumentPreview key={`${document.id}-${document.kind}`} orderId={document.id} kind={document.kind} onClose={() => setDocument(null)} />}
       {selected && (
         <ReviewOrder
           order={selected}

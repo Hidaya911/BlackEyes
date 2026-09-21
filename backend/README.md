@@ -107,3 +107,78 @@ contact/audit columns. For existing PostgreSQL databases, it also makes
 account. Existing online customer links are retained. The PostgreSQL database
 user must have the same schema-update permissions required by existing startup
 migrations. Fresh local databases receive the updated model definitions.
+
+## Admin customers, reporting, and material usage
+
+### Customer customization and local payment
+
+Customers attach artwork in the product customization modal and can edit it in
+the first checkout step. Each item has design groups: one group may cover the
+whole quantity, or multiple groups may split it (for example, two mugs using
+one design each). Group quantities must total the ordered item quantity. Each
+group needs a PDF/PNG/JPEG file or a design brief. The order permits up to 30
+files, 10 MB each and 20 MB combined. Shared artwork is stored once per group.
+
+Startup creates `order_item_designs` and adds nullable `design_files.design_id`
+for existing databases. Old order-level artwork remains accessible. Customers,
+staff, and admins see the item, design, quantity, brief, and associated files.
+Files remain selected while browsing and reopening checkout; after a full page
+refresh, saved basket entries explicitly require reattaching their local files.
+
+New customer orders accept only cash payment at the press on collection.
+Customer Whish checkout and transfer-reference submissions are disabled;
+existing financial records and operator/vendor payment flows are retained.
+
+### Invoices and receipts
+
+Admin and staff share **Invoices & receipts**, also accessible from each order
+card. A read-only `/api/press/orders/{id}/documents/{invoice|receipt}` endpoint
+refreshes the order before previewing. Receipts require a positive verified
+payment; pending transfers do not count as received funds. Partial receipts show
+the amount received and the remaining balance.
+
+The document preview uses the Blackeyes logo, isolated A4 print styles, and the
+separate Print and Download PDF actions. Direct PDF downloads render locally
+without browser-added dates, URLs, titles, or page counters. Print styles use
+zero page margins with internal document padding to suppress browser decorations.
+Invoice references use the order ID;
+receipt references use the payment ID. Documents are current order/payment
+summaries, not immutable issued-document records. The existing payment model
+stores a cumulative amount, so receipts explicitly describe that total rather
+than claiming to represent an individual installment. Printing does not change
+payment or production status.
+
+Customers supports portal accounts and saved walk-in contacts, with create/edit
+and delete confirmation modals. Records with orders cannot be deleted; portal
+accounts can instead be deactivated. These new admin APIs require an active
+administrator session cookie.
+
+Dashboard shows all-time order sales, verified collections, outstanding customer
+and vendor balances, production stages, recent orders, and current stock alerts.
+Reports filters orders by inclusive UTC dates and exports product/customer sales,
+daily sales, and material usage to CSV. Collections represent current verified
+payments against the selected orders, not a cash-receipts-by-payment-date report.
+Vendor balances and stock alerts always represent the current position.
+
+Restart the backend to create the new `product_materials` table. In Products,
+use **Inventory & material usage** to link a catalog product to one or more
+inventory items and specify the quantity consumed per unit sold. For A4 sheets,
+link the A4 product to the purchased A4 inventory item with quantity **1**.
+Matching names alone do not establish a link. Refresh stock to reload products
+or materials added while the screen was open.
+
+New online and counter orders deduct linked materials atomically when placed.
+This implements the requested order-time behavior rather than the BRD's later
+production/completion timing. Insufficient stock rejects the whole order;
+submission retries do not deduct twice. Custom jobs/unlinked products do not
+deduct inventory. Existing orders are not backfilled and changing a recipe only
+affects subsequent orders. Material usage is audited in inventory transactions.
+Alerts trigger at `quantity_on_hand <= low_stock_threshold`, refresh on admin
+navigation/window focus and every 30 seconds, and remain visible across sections.
+
+Run isolated regressions (no live database writes):
+
+```powershell
+cd backend
+.\venv\Scripts\python.exe -B -m unittest discover -s tests -v
+```

@@ -13,6 +13,8 @@ from .order import Order, OrderItem
 from .design_file import DesignFile
 from .job_status import JobStatusHistory
 from .customer import WalkInCustomer
+from .product_material import ProductMaterial
+from .order_design import OrderItemDesign
 
 __all__ = [
     "Base",

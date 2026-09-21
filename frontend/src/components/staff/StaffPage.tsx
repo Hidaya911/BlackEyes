@@ -12,6 +12,7 @@ import {
 import type { AuthUser } from "../../api/auth";
 import { getPressProfile } from "../../api/press";
 import { OrderManager } from "../press/OrderManager";
+import { DocumentCenter } from '../press/documents/DocumentCenter';
 import { WalkInOrder } from "../press/WalkInOrder";
 import { StaffSettings } from "./StaffSettings";
 import { ProfileAvatar } from "./ProfileAvatar";
@@ -21,6 +22,7 @@ import "../../style/PressWorkspace.css";
 const sections = [
   ["Orders", FaClipboardList],
   ["New walk-in order", FaPlus],
+  ["Invoices & receipts", FaClipboardList],
   ["Settings", FaCog],
 ] as const;
 type Section = (typeof sections)[number][0];
@@ -187,6 +189,7 @@ export function StaffPage({
         {section === "Orders" && (
           <OrderManager onCreate={() => navigate("New walk-in order")} />
         )}
+        {section === 'Invoices & receipts' && <DocumentCenter />}
         {section === "New walk-in order" && (
           <WalkInOrder
             onCancel={() => navigate("Orders")}

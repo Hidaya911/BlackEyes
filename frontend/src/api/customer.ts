@@ -14,6 +14,14 @@ export interface CartLine {
   product_id: number;
   quantity: number;
   specifications: string;
+  designs?: DesignDraft[];
+}
+
+export interface DesignDraft {
+  quantity: number;
+  brief: string;
+  file?: File;
+  upload_name?: string;
 }
 
 export interface CustomerOrder {
@@ -38,29 +46,31 @@ export interface CustomerOrder {
     unit_price: number;
     subtotal: number;
     specifications: string | null;
+    designs: { design_id: number; quantity: number; brief: string }[];
   }[];
   files: {
     file_id: number;
     name: string;
     size: number;
     verification_status: string;
+    design_id: number | null;
   }[];
 }
 
 export interface PortalConfig {
-  whish_phone: string;
+  payment_methods: string[];
   currency: string;
 }
 
 export interface CheckoutInput {
   request_key: string;
-  items: CartLine[];
+  items: { product_id: number; quantity: number; specifications: string; designs: { quantity: number; brief: string; file?: { name: string; data_url: string } }[] }[];
   files: { name: string; data_url: string }[];
   design_request_note: string;
   contact_phone: string;
   expected_total: number;
-  payment_method: "cash" | "whish_money";
-  payment_timing: "on_order" | "after_pickup";
+  payment_method: "cash";
+  payment_timing: "after_pickup";
 }
 
 export async function customerRequest<T>(

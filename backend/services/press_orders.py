@@ -23,6 +23,7 @@ from models import (
 )
 from schemas.requests.press import LocalOrderRequest
 from services.order_details import order_response
+from services.inventory import consume_materials
 from utilities.files import decode_artwork, MAX_TOTAL_FILE_BYTES
 
 
@@ -158,6 +159,7 @@ def create_local_order(payload: LocalOrderRequest, operator: User, db: Session):
                 unit_price=Decimal(price) / 100, subtotal=Decimal(subtotal) / 100,
                 custom_description=item.specifications or None,
             ))
+        consume_materials(db, order.order_id, payload.items, operator.user_id)
         for name, mime, content in decoded:
             db.add(DesignFile(
                 order_id=order.order_id,

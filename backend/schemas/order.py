@@ -5,6 +5,9 @@ from sqlalchemy import inspect, text
 
 def column_updates(dialect_name):
     return {
+        "design_files": {
+            "design_id": "INTEGER REFERENCES order_item_designs(design_id) ON DELETE CASCADE",
+        },
         "orders": {
             "walk_in_customer_id": "INTEGER REFERENCES walk_in_customers(customer_id) ON DELETE RESTRICT",
             "created_by": "INTEGER REFERENCES users(user_id) ON DELETE RESTRICT",

@@ -8,11 +8,16 @@ import { VendorManager } from './VendorManager';
 import { OrderManager } from '../press/OrderManager';
 import { WalkInOrder } from '../press/WalkInOrder';
 import { SettingsManager } from './SettingsManager';
+import { CustomerManager } from './CustomerManager';
+import { AdminReports } from './AdminReports';
+import { InventoryManager } from './InventoryManager';
+import { StockAlerts } from './StockAlerts';
+import { DocumentCenter } from '../press/documents/DocumentCenter';
 import logo from '../../assets/logo in white.png';
 import '../../style/AdminPage.css';
 
 interface Props { onNavigateHome: () => void; adminId?: number; user: AuthUser | null; }
-const links = [['Dashboard', FaLayerGroup], ['Orders', FaClipboardList], ['New walk-in order', FaClipboardList], ['Products', FaBoxOpen], ['Create staff', FaUsers], ['Vendors', FaTruck], ['Customers', FaUsers], ['Reports', FaChartLine], ['Settings', FaCog]] as const;
+const links = [['Dashboard', FaLayerGroup], ['Orders', FaClipboardList], ['New walk-in order', FaClipboardList], ['Invoices & receipts', FaClipboardList], ['Products', FaBoxOpen], ['Create staff', FaUsers], ['Vendors', FaTruck], ['Customers', FaUsers], ['Reports', FaChartLine], ['Settings', FaCog]] as const;
 
 function AdminAvatar({ profile }: { profile: AuthUser | null }) {
   const [failedImage, setFailedImage] = useState<string | null>(null);
@@ -67,6 +72,18 @@ export const AdminPage = ({ onNavigateHome, adminId, user }: Props) => {
   let content;
 
   switch (section) {
+    case 'Invoices & receipts':
+      content = <DocumentCenter />;
+      break;
+    case 'Dashboard':
+      content = <AdminReports key="dashboard" dashboard onNavigate={navigateToSection} />;
+      break;
+    case 'Reports':
+      content = <AdminReports key="reports" onNavigate={navigateToSection} />;
+      break;
+    case 'Customers':
+      content = <CustomerManager />;
+      break;
     case 'Orders':
       content = <>{orderNotice && <div className="alert alert-success" role="status">{orderNotice}</div>}<OrderManager onCreate={() => navigateToSection('New walk-in order')} /></>;
       break;
@@ -74,7 +91,7 @@ export const AdminPage = ({ onNavigateHome, adminId, user }: Props) => {
       content = <WalkInOrder onCancel={() => navigateToSection('Orders')} onCreated={order => { setSection('Orders'); setOrderNotice(`Order #${order.order_id} created for ${order.customer_name}. It is ready for review.`); }} />;
       break;
     case 'Products':
-      content = <ProductManager adminId={adminId} />;
+      content = <><ProductManager adminId={adminId} /><InventoryManager /></>;
       break;
     case 'Create staff':
       content = <StaffManager adminId={adminId} />;
@@ -224,6 +241,7 @@ export const AdminPage = ({ onNavigateHome, adminId, user }: Props) => {
             </Dropdown>
           </div>
         </header>
+        <StockAlerts section={section} onManage={() => navigateToSection('Products')} />
         {content}
       </section>
     </main>

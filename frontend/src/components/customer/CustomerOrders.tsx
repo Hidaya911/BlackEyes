@@ -10,10 +10,9 @@ import {
 } from "react-icons/fa";
 import {
   customerMoney,
-  submitTransferReference,
   type CustomerOrder,
-  type PortalConfig,
 } from "../../api/customer";
+import { OrderDesignSummary } from '../shared/OrderDesignSummary';
 
 const stages = [
   "Awaiting review",
@@ -40,25 +39,19 @@ const dateLabel = (value: string) =>
 
 interface Props {
   orders: CustomerOrder[];
-  config: PortalConfig;
   onRefresh: () => Promise<void>;
   onBrowse: () => void;
-  onUpdated: (order: CustomerOrder) => void;
 }
 
 export function CustomerOrders({
   orders,
-  config,
   onRefresh,
   onBrowse,
-  onUpdated,
 }: Props) {
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
-  const [reference, setReference] = useState("");
-  const [saving, setSaving] = useState(false);
   const selected = orders.find((order) => order.order_id === selectedId);
   const filtered = orders.filter((order) =>
     `${order.order_id} ${order.items.map((item) => item.name).join(" ")}`
@@ -144,7 +137,6 @@ export function CustomerOrders({
               <button
                 onClick={() => {
                   setSelectedId(order.order_id);
-                  setReference("");
                   setError("");
                 }}
               >
@@ -174,14 +166,14 @@ export function CustomerOrders({
       )}
       <Modal
         show={!!selected}
-        onHide={() => !saving && setSelectedId(null)}
+        onHide={() => setSelectedId(null)}
         centered
         size="lg"
         scrollable
         contentClassName="customer-modal"
         aria-labelledby="customer-order-title"
       >
-        <Modal.Header closeButton={!saving}>
+        <Modal.Header closeButton>
           <Modal.Title id="customer-order-title">
             Order #{selected?.order_id}
           </Modal.Title>
@@ -235,11 +227,12 @@ export function CustomerOrders({
               <div className="customer-order-detail-grid">
                 <section>
                   <h3>Design & files</h3>
+                  <OrderDesignSummary order={selected} audience="customer" />
                   <p className="customer-preserve-text">
                     {selected.design_request_note ||
-                      "Use the supplied artwork."}
+                      (selected.items.some(item => item.designs?.length) ? '' : "Use the supplied artwork.")}
                   </p>
-                  {selected.files.map((file) => (
+                  {selected.files.filter(file => !file.design_id).map((file) => (
                     <a
                       className="customer-file-download"
                       key={file.file_id}
@@ -274,15 +267,6 @@ export function CustomerOrders({
                     {paymentLabels[selected.payment_status] ||
                       selected.payment_status}
                   </span>
-                  {selected.payment_method === "whish_money" &&
-                    selected.payment_status !== "paid" && (
-                      <div className="customer-whish-number mt-3">
-                        <span>
-                          Whish transfer number
-                          <strong>{config.whish_phone}</strong>
-                        </span>
-                      </div>
-                    )}
                   <p className="mt-3">Contact: {selected.contact_phone}</p>
                   <p>Received: {customerMoney(selected.amount_paid)} · Balance due: {customerMoney(selected.amount_due)}</p>
                   {selected.payment_reference && (
@@ -290,59 +274,6 @@ export function CustomerOrders({
                   )}
                 </section>
               </div>
-              {selected.payment_method === "whish_money" &&
-                selected.payment_status === "awaiting_payment" && (
-                  <form
-                    className="customer-transfer-form"
-                    onSubmit={async (event) => {
-                      event.preventDefault();
-                      if (saving) return;
-                      setSaving(true);
-                      setError("");
-                      try {
-                        onUpdated(
-                          await submitTransferReference(
-                            selected.order_id,
-                            reference,
-                          ),
-                        );
-                      } catch (failure) {
-                        setError(
-                          failure instanceof Error
-                            ? failure.message
-                            : "Unable to submit reference.",
-                        );
-                      } finally {
-                        setSaving(false);
-                      }
-                    }}
-                  >
-                    <h3>Already made your transfer?</h3>
-                    <p className="customer-form-hint">
-                      You can optionally share the reference so the press can
-                      match your payment. It will remain pending until verified.
-                    </p>
-                    <label className="customer-field">
-                      <span>Whish transfer reference</span>
-                      <input
-                        className="form-control"
-                        required
-                        minLength={3}
-                        maxLength={100}
-                        value={reference}
-                        disabled={saving}
-                        onChange={(event) => setReference(event.target.value)}
-                      />
-                    </label>
-                    <button
-                      className="customer-button mt-3"
-                      type="submit"
-                      disabled={saving}
-                    >
-                      {saving ? "Submitting…" : "Submit reference"}
-                    </button>
-                  </form>
-                )}
               {error && (
                 <div className="alert alert-danger mt-3" role="alert">
                   {error}
@@ -354,7 +285,6 @@ export function CustomerOrders({
         <Modal.Footer>
           <button
             className="btn btn-light"
-            disabled={saving}
             onClick={() => setSelectedId(null)}
           >
             Close
