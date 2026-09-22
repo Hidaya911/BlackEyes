@@ -66,8 +66,7 @@ Vite forwards `/api` to `127.0.0.1:8000`. The backend loads `backend/.env`
 by absolute path, regardless of the terminal's working directory. After a
 backend reload, wait for `Application startup complete` before submitting.
 
-The SQLite backend checks, temporary test server, frontend browser tests, and
-Playwright configuration were removed. None are needed to run the application.
+Isolated SQLite regression tests live in `tests/` and do not use the live database.
 
 Folder responsibilities:
 
@@ -96,7 +95,41 @@ Catalog prices are calculated on the server, including existing account-specific
 prices. Custom service lines accept a name, quantity, and price in cents. Attach
 artwork or supply a job brief. Cash/Whish payments may be full, partial, or unpaid;
 the order stores received and remaining amounts. Review can confirm collection
-of the remaining balance. This is not a separate installment transaction ledger.
+of the remaining balance. Each received payment also enters the customer ledger.
+
+## Production workflow
+
+Both staff and admin open **Orders** to switch between **Production board** and
+**Order review**. Incoming orders remain in the Awaiting review inbox until
+reviewed. The board has Queued, In Prepress, Printing, Finishing, and Ready for
+Pickup columns. Drag cards between stages or use the Move to menu (also usable
+with touch and keyboard). Review remains accessible on every card.
+
+Stage updates use the existing authenticated order PATCH endpoint and record
+the operator in job status history. Artwork must be approved before production;
+moving a card never confirms payment. The UI sends `expected_stage`, so a move
+based on an outdated stage is rejected with HTTP 409 and the board refreshes.
+Forward moves and corrections to earlier production stages are supported.
+
+## Customer debt ledger
+
+Admin and staff share **Customer ledger** in their sidebar. Search portal and
+walk-in customers, filter outstanding/settled accounts, open chronological
+statements with running balances, and export CSV statements. Record partial or
+full payments against a selected order; unpaid credit remains outstanding.
+Invoices and cumulative receipts are accessible from the statement.
+
+`routers/customer_ledger.py` exposes authenticated `/api/press/customer-ledger`
+balance, statement, and settlement endpoints. `services/customer_payments.py`
+records installments while maintaining existing order payment summaries for
+reports and receipts. Settlement requests lock the order, reject overpayment,
+and use a unique request key so retries cannot record the payment twice.
+
+Restart the backend to create `customer_payment_transactions`. Earlier verified
+totals appear as **Previous verified payment**; their individual installments
+cannot be reconstructed. New counter payments, ledger settlements, and order
+review confirmations record amount, timestamp, operator, method, and reference.
+Pending transfers do not reduce debt. API amounts use integer USD cents.
 
 Only active, signed-in staff/admin sessions can use `/api/press/*`. Profile
 settings update the signed-in operator; password changes revoke their sessions.

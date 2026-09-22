@@ -11,7 +11,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from database import Base, get_db
 from main import app
-from models import User, Product, InventoryItem, InventoryTransaction, Order, OrderPayment, DesignFile, OrderItemDesign
+from models import User, Product, InventoryItem, InventoryTransaction, Order, OrderPayment, DesignFile, OrderItemDesign, CustomerPayment
 from sessions import current_user
 
 
@@ -51,6 +51,114 @@ class AdminWorkspaceTests(unittest.TestCase):
         return dict(request_key=str(uuid4()), customer_id=self.customer.user_id,
             items=[dict(product_id=self.product.product_id, quantity=quantity)],
             design_request_note="Print A4", expected_total=100 * quantity, amount_paid=50)
+
+    def test_ledger_installments_retries_and_document_totals(self):
+        order_id = self.client.post('/api/press/orders', json=self.order()).json()['order_id']
+        path = f'/api/press/customer-ledger/account/{self.customer.user_id}'
+        self.assertEqual(self.client.get(path).json()['due'], 50)
+        payload = dict(request_key=str(uuid4()), order_id=order_id, amount=20, method='cash')
+        for _ in range(2):
+            result = self.client.post(path + '/payments', json=payload)
+            self.assertEqual(result.status_code, 200, result.text)
+        self.assertEqual(self.client.get(path).json()['due'], 30)
+        self.assertEqual(self.db.query(CustomerPayment).count(), 2)
+        self.assertEqual(self.client.post(path + '/payments', json={**payload, 'amount': 10}).status_code, 409)
+        self.assertEqual(self.client.post(path + '/payments', json={**payload, 'request_key':str(uuid4()), 'amount':31}).status_code, 409)
+        result = self.client.post(path + '/payments', json={**payload, 'request_key':str(uuid4()), 'amount':30})
+        self.assertEqual(result.status_code, 200, result.text)
+        statement = self.client.get(path).json()
+        self.assertEqual([e['balance'] for e in statement['entries']], [100, 50, 30, 0])
+        self.assertEqual(statement['orders'][0]['payment_status'], 'paid')
+        receipt = self.client.get(f'/api/press/orders/{order_id}/documents/receipt').json()
+        self.assertEqual(receipt['order']['amount_paid'], 100)
+        self.assertEqual(receipt['order']['amount_due'], 0)
+        report = self.client.get('/api/admin/reports').json()
+        self.assertEqual(float(report['collected']), 1)
+        self.assertEqual(float(report['outstanding']), 0)
+
+    def test_ledger_legacy_history_and_order_review(self):
+        order_id = self.client.post('/api/press/orders', json=self.order()).json()['order_id']
+        self.db.query(CustomerPayment).delete()
+        self.db.commit()
+        path = f'/api/press/customer-ledger/account/{self.customer.user_id}'
+        statement = self.client.get(path).json()
+        self.assertEqual(statement['entries'][1]['description'], 'Previous verified payment')
+        self.assertEqual(self.db.query(CustomerPayment).count(), 0)
+        payload = dict(production_stage='Awaiting review', confirm_payment=True)
+        for _ in range(2):
+            result = self.client.patch(f'/api/press/orders/{order_id}', json=payload)
+            self.assertEqual(result.status_code, 200, result.text)
+        self.assertEqual(self.db.query(CustomerPayment).count(), 2)
+        self.assertEqual(self.client.get(path).json()['due'], 0)
+        self.assertEqual(self.client.get(path).json()['entries'][-1]['balance'], 0)
+
+    def test_ledger_permissions_validation_and_customer_isolation(self):
+        order_id = self.client.post('/api/press/orders', json=self.order()).json()['order_id']
+        path = f'/api/press/customer-ledger/account/{self.customer.user_id}'
+        payload = dict(request_key=str(uuid4()), order_id=order_id, amount=20, method='cash')
+        for amount in [0, -1, 1.5]:
+            self.assertEqual(self.client.post(path + '/payments', json={**payload, 'amount':amount}).status_code, 422)
+        walkin = self.client.post('/api/admin/customers/walk_in', json=dict(full_name='Customer', phone='12345', email='', address='')).json()['id']
+        self.assertEqual(self.client.post(f'/api/press/customer-ledger/walk_in/{walkin}/payments', json=payload).status_code, 404)
+        self.admin.role = 'staff'
+        self.db.commit()
+        self.assertEqual(self.client.get('/api/press/customer-ledger').status_code, 200)
+        self.assertEqual(self.client.get(path).status_code, 200)
+        self.assertEqual(self.client.post(path + '/payments', json=payload).status_code, 200)
+        self.actor = self.customer
+        self.assertEqual(self.client.get('/api/press/customer-ledger').status_code, 403)
+        self.assertEqual(self.client.get(path).status_code, 403)
+        self.assertEqual(self.client.post(path + '/payments', json=payload).status_code, 403)
+
+    def test_ledger_pending_transfer_is_not_received_money(self):
+        payload = {**self.order(), 'amount_paid':0}
+        order_id = self.client.post('/api/press/orders', json=payload).json()['order_id']
+        summary = self.db.query(OrderPayment).filter_by(order_id=order_id).one()
+        summary.amount = 1
+        summary.status = 'pending_verification'
+        self.db.commit()
+        path = f'/api/press/customer-ledger/account/{self.customer.user_id}'
+        self.assertEqual(self.client.get(path).json()['due'], 100)
+        result = self.client.post(path + '/payments', json=dict(request_key=str(uuid4()), order_id=order_id, amount=25, method='cash'))
+        self.assertEqual(result.status_code, 200, result.text)
+        statement = self.client.get(path).json()
+        self.assertEqual(statement['paid'], 25)
+        self.assertEqual(statement['due'], 75)
+        self.assertEqual(len(statement['entries']), 2)
+
+    def test_staff_production_workflow_and_stale_updates(self):
+        from models import JobStatusHistory
+        order_id = self.client.post('/api/press/orders', json=self.order()).json()['order_id']
+        self.admin.role = 'staff'
+        self.db.commit()
+        path = f'/api/press/orders/{order_id}'
+        previous = 'Awaiting review'
+        for stage in ['Queued', 'In Prepress', 'Printing', 'Finishing', 'Ready for Pickup']:
+            result = self.client.patch(path, json=dict(production_stage=stage, expected_stage=previous))
+            self.assertEqual(result.status_code, 200, result.text)
+            self.assertEqual(result.json()['production_stage'], stage)
+            self.assertEqual(result.json()['amount_due'], 50)
+            previous = stage
+        history = self.db.query(JobStatusHistory).filter_by(order_id=order_id).count()
+        self.assertEqual(self.client.patch(path, json=dict(production_stage='Printing', expected_stage='Queued')).status_code, 409)
+        self.assertEqual(self.client.patch(path, json=dict(production_stage=previous, expected_stage=previous)).status_code, 200)
+        self.assertEqual(self.db.query(JobStatusHistory).filter_by(order_id=order_id).count(), history)
+        self.assertEqual(self.client.patch(path, json=dict(production_stage='Unknown')).status_code, 422)
+        self.actor = self.customer
+        self.assertEqual(self.client.patch(path, json=dict(production_stage='Queued')).status_code, 403)
+
+    def test_staff_board_cannot_bypass_artwork_review(self):
+        self.actor = self.customer
+        created = self.client.post('/api/customer/orders', json=self.design_order([dict(quantity=2, file=self.artwork())]))
+        self.assertEqual(created.status_code, 201, created.text)
+        path = f"/api/press/orders/{created.json()['order_id']}"
+        self.admin.role = 'staff'
+        self.db.commit()
+        self.actor = self.admin
+        self.assertEqual(self.client.patch(path, json=dict(production_stage='Queued', expected_stage='Awaiting review')).status_code, 422)
+        reviewed = self.client.patch(path, json=dict(production_stage='Queued', expected_stage='Awaiting review', approve_artwork=True))
+        self.assertEqual(reviewed.status_code, 200, reviewed.text)
+        self.assertEqual(reviewed.json()['files'][0]['verification_status'], 'verified')
 
     def test_threshold_retry_and_report(self):
         self.link()

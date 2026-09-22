@@ -17,6 +17,7 @@ from models import (
     Order,
     OrderItem,
     OrderPayment,
+    CustomerPayment,
     Product,
     User,
     WalkInCustomer,
@@ -175,6 +176,11 @@ def create_local_order(payload: LocalOrderRequest, operator: User, db: Session):
             confirmed_by=operator.user_id if payload.amount_paid or total == 0 else None,
             confirmed_at=datetime.now(timezone.utc) if payload.amount_paid or total == 0 else None,
         ))
+        if payload.amount_paid:
+            db.add(CustomerPayment(order_id=order.order_id, amount=Decimal(payload.amount_paid) / 100,
+                method=payload.payment_method, reference=payload.payment_reference.upper() or None,
+                recorded_by=operator.user_id, recorded_at=datetime.now(timezone.utc),
+                source="initial", request_key=f"initial-order-{order.order_id}"))
         db.add(JobStatusHistory(
             order_id=order.order_id, changed_by=operator.user_id, stage="Awaiting review"
         ))

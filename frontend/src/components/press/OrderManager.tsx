@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Modal } from "react-bootstrap";
 import { FaDownload, FaReceipt, FaSyncAlt } from "react-icons/fa";
 import { customerMoney } from "../../api/customer";
@@ -6,6 +6,7 @@ import type { PressOrder } from "../../api/press";
 import "../../style/OrderManager.css";
 import { DocumentPreview } from './documents/DocumentPreview';
 import { OrderDesignSummary } from '../shared/OrderDesignSummary';
+import { ProductionBoard } from './production/ProductionBoard';
 
 async function request<T>(path = "", options?: RequestInit): Promise<T> {
   const response = await fetch(`/api/press/orders${path}`, options);
@@ -49,6 +50,7 @@ function ReviewOrder({
             production_stage: stage,
             approve_artwork: approve,
             confirm_payment: confirm,
+            expected_stage: order.production_stage,
           }),
         }),
       );
@@ -274,6 +276,24 @@ export function OrderManager({ onCreate }: { onCreate?: () => void }) {
   const [error, setError] = useState("");
   const [reload, setReload] = useState(0);
   const [query, setQuery] = useState("");
+  const [view, setView] = useState<'board' | 'review'>('board');
+  const [moving, setMoving] = useState(false);
+  const moveLock = useRef(false);
+  const [moveError, setMoveError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  async function moveOrder(order: PressOrder, stage: string) {
+    if (moveLock.current || stage === order.production_stage) return;
+    moveLock.current = true; setMoving(true); setMoveError(''); setNotice('');
+    try {
+      const saved = await request<PressOrder>(`/${order.order_id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ production_stage: stage, expected_stage: order.production_stage }) });
+      setOrders(current => current.map(row => row.order_id === saved.order_id ? saved : row));
+      setNotice(`Order #${saved.order_id} moved to ${saved.production_stage}.`);
+    } catch (failure) {
+      setMoveError(failure instanceof Error ? failure.message : 'Unable to move order.');
+      setReload(value => value + 1);
+    } finally { moveLock.current = false; setMoving(false); }
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -313,7 +333,7 @@ export function OrderManager({ onCreate }: { onCreate?: () => void }) {
           )}
           <button
             className="btn btn-outline-light"
-            disabled={loading}
+            disabled={loading || moving}
             onClick={() => setReload((value) => value + 1)}
           >
             <FaSyncAlt className="me-2" />
@@ -321,6 +341,9 @@ export function OrderManager({ onCreate }: { onCreate?: () => void }) {
           </button>
         </div>
       </header>
+      <div className="production-view-switch" aria-label="Order views"><button aria-pressed={view === 'board'} onClick={() => setView('board')}>Production board</button><button aria-pressed={view === 'review'} onClick={() => setView('review')}>Order review</button></div>
+      {moveError && <div className="alert alert-danger" role="alert">{moveError}</div>}
+      {notice && <div className="alert alert-success" role="status">{notice}</div>}
       <input
         className="form-control mb-4"
         type="search"
@@ -336,6 +359,8 @@ export function OrderManager({ onCreate }: { onCreate?: () => void }) {
       )}
       {loading ? (
         <p role="status">Loading orders…</p>
+      ) : view === 'board' ? (
+        <ProductionBoard orders={visible} busy={moving} onReview={setSelected} onMove={(order, stage) => void moveOrder(order, stage)} />
       ) : (
         <div className="press-orders-grid">
           {visible.map((order) => (

@@ -13,6 +13,7 @@ import type { AuthUser } from "../../api/auth";
 import { getPressProfile } from "../../api/press";
 import { OrderManager } from "../press/OrderManager";
 import { DocumentCenter } from '../press/documents/DocumentCenter';
+import { CustomerLedger } from '../press/ledger/CustomerLedger';
 import { WalkInOrder } from "../press/WalkInOrder";
 import { StaffSettings } from "./StaffSettings";
 import { ProfileAvatar } from "./ProfileAvatar";
@@ -23,6 +24,7 @@ const sections = [
   ["Orders", FaClipboardList],
   ["New walk-in order", FaPlus],
   ["Invoices & receipts", FaClipboardList],
+  ["Customer ledger", FaClipboardList],
   ["Settings", FaCog],
 ] as const;
 type Section = (typeof sections)[number][0];
@@ -190,6 +192,7 @@ export function StaffPage({
           <OrderManager onCreate={() => navigate("New walk-in order")} />
         )}
         {section === 'Invoices & receipts' && <DocumentCenter />}
+        {section === 'Customer ledger' && <CustomerLedger />}
         {section === "New walk-in order" && (
           <WalkInOrder
             onCancel={() => navigate("Orders")}

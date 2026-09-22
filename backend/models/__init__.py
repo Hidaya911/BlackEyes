@@ -15,6 +15,7 @@ from .job_status import JobStatusHistory
 from .customer import WalkInCustomer
 from .product_material import ProductMaterial
 from .order_design import OrderItemDesign
+from .customer_payment import CustomerPayment
 
 __all__ = [
     "Base",
@@ -27,6 +28,7 @@ __all__ = [
     "VendorPurchase",
     "VendorPayment",
     "OrderPayment",
+    "CustomerPayment",
     "CustomerSpecialPrice",
     "Order",
     "OrderItem",

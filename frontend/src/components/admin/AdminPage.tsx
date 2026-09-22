@@ -13,11 +13,12 @@ import { AdminReports } from './AdminReports';
 import { InventoryManager } from './InventoryManager';
 import { StockAlerts } from './StockAlerts';
 import { DocumentCenter } from '../press/documents/DocumentCenter';
+import { CustomerLedger } from '../press/ledger/CustomerLedger';
 import logo from '../../assets/logo in white.png';
 import '../../style/AdminPage.css';
 
 interface Props { onNavigateHome: () => void; adminId?: number; user: AuthUser | null; }
-const links = [['Dashboard', FaLayerGroup], ['Orders', FaClipboardList], ['New walk-in order', FaClipboardList], ['Invoices & receipts', FaClipboardList], ['Products', FaBoxOpen], ['Create staff', FaUsers], ['Vendors', FaTruck], ['Customers', FaUsers], ['Reports', FaChartLine], ['Settings', FaCog]] as const;
+const links = [['Dashboard', FaLayerGroup], ['Orders', FaClipboardList], ['New walk-in order', FaClipboardList], ['Invoices & receipts', FaClipboardList], ['Products', FaBoxOpen], ['Create staff', FaUsers], ['Vendors', FaTruck], ['Customers', FaUsers], ['Customer ledger', FaClipboardList], ['Reports', FaChartLine], ['Settings', FaCog]] as const;
 
 function AdminAvatar({ profile }: { profile: AuthUser | null }) {
   const [failedImage, setFailedImage] = useState<string | null>(null);
@@ -72,6 +73,9 @@ export const AdminPage = ({ onNavigateHome, adminId, user }: Props) => {
   let content;
 
   switch (section) {
+    case 'Customer ledger':
+      content = <CustomerLedger />;
+      break;
     case 'Invoices & receipts':
       content = <DocumentCenter />;
       break;

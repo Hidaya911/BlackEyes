@@ -21,6 +21,7 @@ from routers import (
 from schemas import apply_schema_updates
 from routers import admin_customers, admin_inventory, admin_reports
 from routers import order_documents
+from routers import customer_ledger
 
 app = FastAPI()
 
@@ -33,6 +34,7 @@ app.add_middleware(
 )
 
 for router in (
+    customer_ledger.router,
     order_documents.router,
     admin_customers.router,
     admin_inventory.router,
@@ -57,3 +59,7 @@ def startup():
     """Create missing tables, then apply updates to existing tables."""
     Base.metadata.create_all(bind=engine)
     apply_schema_updates(engine)
+
+# from routers.search import router as search_router
+
+# app.include_router(search_router)
