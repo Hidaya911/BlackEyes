@@ -14,7 +14,7 @@ def utc(value):
 
 
 def customer_record(db, kind, customer_id):
-    person = db.query(User).filter(User.user_id == customer_id, User.role == "customer").first() if kind == "account" else db.get(WalkInCustomer, customer_id)
+    person = db.query(User).filter(User.user_id == customer_id, User.role.in_(["customer", "wholesaler"])).first() if kind == "account" else db.get(WalkInCustomer, customer_id)
     if not person:
         raise HTTPException(404, "Customer not found.")
     return dict(id=customer_id, kind=kind, name=person.full_name, email=person.email or "", phone=person.phone or "", address=person.address or "")
@@ -31,7 +31,7 @@ def order_rows(db, kind=None, customer_id=None):
 def balances(db):
     customers = {}
     # Keep identity based on IDs: a portal and walk-in contact can share a name.
-    names = {("account", p.user_id): (p.full_name, p.phone, p.email) for p in db.query(User).filter(User.role == "customer").all()}
+    names = {("account", p.user_id): (p.full_name, p.phone, p.email) for p in db.query(User).filter(User.role.in_(["customer", "wholesaler"])).all()}
     names.update({("walk_in", p.customer_id): (p.full_name, p.phone, p.email) for p in db.query(WalkInCustomer).all()})
     for order, payment in order_rows(db):
         key = ("account", order.customer_id) if order.customer_id is not None else ("walk_in", order.walk_in_customer_id)

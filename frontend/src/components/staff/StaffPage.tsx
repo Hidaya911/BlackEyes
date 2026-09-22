@@ -11,6 +11,7 @@ import {
 } from "react-icons/fa";
 import type { AuthUser } from "../../api/auth";
 import { getPressProfile } from "../../api/press";
+import { CustomerManager } from "../admin/CustomerManager";
 import { OrderManager } from "../press/OrderManager";
 import { DocumentCenter } from '../press/documents/DocumentCenter';
 import { CustomerLedger } from '../press/ledger/CustomerLedger';
@@ -22,6 +23,7 @@ import "../../style/PressWorkspace.css";
 
 const sections = [
   ["Orders", FaClipboardList],
+  ["Customers", FaClipboardList],
   ["New walk-in order", FaPlus],
   ["Invoices & receipts", FaClipboardList],
   ["Customer ledger", FaClipboardList],
@@ -192,6 +194,7 @@ export function StaffPage({
           <OrderManager onCreate={() => navigate("New walk-in order")} />
         )}
         {section === 'Invoices & receipts' && <DocumentCenter />}
+        {section === "Customers" && <CustomerManager readOnly />}
         {section === 'Customer ledger' && <CustomerLedger />}
         {section === "New walk-in order" && (
           <WalkInOrder

@@ -22,11 +22,13 @@ class ProductRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=2000)
     price: int = Field(ge=0)
+    wholesale_price: int = Field(ge=0, le=2147483647)
     image_url: str | None = Field(default=None, max_length=2000000)
     status: Literal['active', 'retired'] = 'active'
 
 
 class ProductResponse(BaseModel):
+    wholesale_price: int | None
     product_id: int
     name: str
     description: str | None
@@ -62,7 +64,7 @@ def list_products(admin_id: int, db: Session=Depends(get_db)):
 @router.post('/api/admin/products', response_model=ProductResponse, status_code=status.HTTP_201_CREATED)
 def create_product(payload: ProductRequest, db: Session=Depends(get_db)):
     require_admin(payload.admin_id, db)
-    product = Product(name=payload.name.strip(), description=payload.description, price=payload.price, image_url=store_product_image(payload.image_url), status=payload.status)
+    product = Product(name=payload.name.strip(), description=payload.description, price=payload.price, wholesale_price=payload.wholesale_price, image_url=store_product_image(payload.image_url), status=payload.status)
     db.add(product)
     db.commit()
     db.refresh(product)
@@ -78,6 +80,7 @@ def edit_product(product_id: int, payload: ProductRequest, db: Session=Depends(g
     product.name = payload.name.strip()
     product.description = payload.description
     product.price = payload.price
+    product.wholesale_price = payload.wholesale_price
     product.image_url = store_product_image(payload.image_url)
     product.status = payload.status
     db.commit()

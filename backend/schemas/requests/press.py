@@ -36,8 +36,6 @@ class LocalOrderItem(PressInput):
     def custom_details(self):
         if self.product_id is None and (not self.name or self.unit_price is None):
             raise ValueError("Custom jobs need a name and unit price.")
-        if self.product_id is not None and self.unit_price is not None:
-            raise ValueError("Catalog prices are calculated by the server.")
         return self
 
 

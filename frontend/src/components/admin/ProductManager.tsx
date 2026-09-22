@@ -5,6 +5,7 @@ import { deleteProduct, getProducts, saveProduct, type Product } from '../../api
 interface ProductForm {
   name: string;
   price: string;
+  wholesale_price: string;
   description: string;
   image_url: string;
   status: string;
@@ -13,6 +14,7 @@ interface ProductForm {
 const emptyForm = (): ProductForm => ({
   name: '',
   price: '',
+  wholesale_price: '',
   description: '',
   image_url: '',
   status: 'active',
@@ -79,7 +81,7 @@ function ProductFields({ id, value, onChange, onReadingChange }: ProductFieldsPr
         </div>
         <div className="col-md-3">
           <label htmlFor={`${id}-price`} className="form-label small fw-bold">
-            PRICE ($)
+            RETAIL PRICE ($)
           </label>
           <input
             id={`${id}-price`}
@@ -92,6 +94,7 @@ function ProductFields({ id, value, onChange, onReadingChange }: ProductFieldsPr
             onChange={(event) => onChange({ ...value, price: event.target.value })}
           />
         </div>
+        <div className="col-md-3"><label htmlFor={`${id}-wholesale`} className="form-label small fw-bold">WHOLESALE PRICE ($)</label><input id={`${id}-wholesale`} className="form-control" type="number" min="0" max="21474836.47" step="0.01" required value={value.wholesale_price} onChange={event => onChange({ ...value, wholesale_price: event.target.value })} /></div>
         <div className="col-md-3">
           <label htmlFor={`${id}-status`} className="form-label small fw-bold">
             STATUS
@@ -196,6 +199,7 @@ export const ProductManager = ({ adminId }: { adminId?: number }) => {
     const values = isEdit ? editForm : form;
     const reportError = isEdit ? setModalError : setError;
     const price = Number(values.price);
+    const wholesalePrice = Number(values.wholesale_price);
     reportError('');
     setMessage('');
 
@@ -204,8 +208,8 @@ export const ProductManager = ({ adminId }: { adminId?: number }) => {
       return;
     }
 
-    if (!values.name.trim() || !values.price.trim() || !Number.isFinite(price) || price < 0) {
-      reportError('Enter a product name and a valid non-negative price.');
+    if (!values.name.trim() || !values.price.trim() || !Number.isFinite(price) || price < 0 || !values.wholesale_price.trim() || !Number.isFinite(wholesalePrice) || wholesalePrice < 0 || wholesalePrice > 21474836.47) {
+      reportError('Enter a product name and valid non-negative retail and wholesale prices.');
       return;
     }
 
@@ -218,6 +222,7 @@ export const ProductManager = ({ adminId }: { adminId?: number }) => {
           ...values,
           name: values.name.trim(),
           price: String(Math.round(price * 100)),
+          wholesale_price: String(Math.round(wholesalePrice * 100)),
         },
         isEdit ? editingProduct?.product_id : undefined,
       );
@@ -247,6 +252,7 @@ export const ProductManager = ({ adminId }: { adminId?: number }) => {
     setEditForm({
       name: product.name,
       price: (product.price / 100).toFixed(2),
+      wholesale_price: product.wholesale_price == null ? '' : (product.wholesale_price / 100).toFixed(2),
       description: product.description ?? '',
       image_url: product.image_url ?? '',
       status: product.status,
@@ -336,7 +342,7 @@ export const ProductManager = ({ adminId }: { adminId?: number }) => {
                   <p className="small text-muted text-break" style={{ whiteSpace: 'pre-wrap' }}>
                     {product.description || 'No description provided.'}
                   </p>
-                  <strong className="mb-3">${(product.price / 100).toFixed(2)}</strong>
+                  <strong>Retail: ${(product.price / 100).toFixed(2)}</strong><span className="mb-3 text-secondary">Wholesale: {product.wholesale_price == null ? 'Not set' : `$${(product.wholesale_price / 100).toFixed(2)}`}</span>
                   <div className="d-flex gap-2 mt-auto">
                     <button
                       className="btn btn-sm btn-outline-dark"

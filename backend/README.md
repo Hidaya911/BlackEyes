@@ -91,11 +91,41 @@ account/saved walk-in contact, or save a new contact with a name, phone, and
 optional email/address. New contacts are saved with the order in one transaction;
 they are not login accounts. Search by name, phone, or email on future visits.
 
-Catalog prices are calculated on the server, including existing account-specific
-prices. Custom service lines accept a name, quantity, and price in cents. Attach
+The counter uses a searchable image catalog with a customization modal for
+quantity, specifications, and an optional unit-price override. Product images,
+names, descriptions, and prices come from the admin Products screen. The existing
+order summary, payment entry, artwork, and custom-service controls remain.
+
+Catalog prices are calculated on the server. Wholesale accounts use the product's
+wholesale price; normal accounts retain account-specific prices when configured,
+otherwise retail prices apply. Staff/admin may enter an agreed unit price for
+one line without modifying the product. An unset wholesale price requires an
+explicit override; it never silently falls back to retail. Switching customers
+clears catalog-item overrides and recalculates their prices; custom-service
+prices remain. The server validates the total and stores the final line prices.
+Custom service lines accept a name, quantity, and price in cents. Attach
 artwork or supply a job brief. Cash/Whish payments may be full, partial, or unpaid;
 the order stores received and remaining amounts. Review can confirm collection
 of the remaining balance. Each received payment also enters the customer ledger.
+
+## Wholesale buyer registration and prices
+
+The homepage **Wholesale** section registers a buyer in `users` with the fixed
+`wholesaler` role, business name, contact name, email, phone, address, and hashed
+password. The public `/api/wholesale/register` endpoint rejects duplicate emails
+and supplied role/status fields. Buyers can sign in to an account acknowledgment
+screen; self-service wholesale ordering remains deferred. Staff/admin can place
+counter orders for wholesale buyers using their wholesale catalog prices.
+
+Admin and staff Customers views include wholesale badges, business names, and a
+Wholesalers filter. Staff have a read-only directory; editing and deletion remain
+admin-only. Normal and wholesale customers remain distinct roles.
+
+Admin product creation and editing require retail and wholesale USD prices,
+stored separately as integer cents. Startup adds `users.business_name` and
+`products.wholesale_price`. Existing wholesale prices remain unset until edited;
+existing retail prices are unchanged. Counter order pricing now supports the
+wholesale tier and authorized per-order overrides.
 
 ## Production workflow
 

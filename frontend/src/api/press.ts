@@ -11,6 +11,8 @@ export interface PressOrder extends CustomerOrder {
 }
 
 export interface PressCustomer {
+  role?: string;
+  business_name?: string | null;
   id: number;
   kind: "account" | "walk_in";
   full_name: string;
@@ -22,7 +24,10 @@ export interface PressCustomer {
 export interface PressProduct {
   product_id: number;
   name: string;
-  price: number;
+  price: number | null;
+  price_kind: 'retail' | 'wholesale' | 'special';
+  image_url?: string | null;
+  description?: string | null;
   special_price: boolean;
 }
 

@@ -27,6 +27,8 @@ class SignupRequest(BaseModel):
     full_name: str = Field(min_length=1, max_length=255)
     email: str = Field(min_length=3, max_length=255)
     password: str = Field(min_length=8, max_length=128)
+    phone: str = Field(default="", max_length=50)
+    address: str = Field(default="", max_length=500)
 
 
 class LoginRequest(BaseModel):
@@ -47,7 +49,7 @@ class AuthResponse(BaseModel):
     user_id: int
     full_name: str
     email: str
-    role: Literal['admin', 'staff', 'customer']
+    role: Literal['admin', 'staff', 'customer', 'wholesaler']
     phone: str | None = None
     address: str | None = None
     status: str
@@ -59,7 +61,7 @@ def signup(payload: SignupRequest, response: Response, db: Session=Depends(get_d
     email = payload.email.strip().lower()
     if db.query(User.user_id).filter(User.email == email).first():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='An account with this email already exists.')
-    user = User(full_name=payload.full_name.strip(), email=email, password_hash=pwd_context.hash(payload.password), role='customer')
+    user = User(full_name=payload.full_name.strip(), email=email, password_hash=pwd_context.hash(payload.password), role='customer', phone=payload.phone.strip() or None, address=payload.address.strip() or None)
     db.add(user)
     db.flush()
     result = profile_response(user)

@@ -15,6 +15,7 @@ import {
   type PressProduct,
 } from "../../api/press";
 import "../../style/PressWorkspace.css";
+import { CounterCatalog } from "./catalog/CounterCatalog";
 
 interface Line {
   id: string;
@@ -53,7 +54,7 @@ export function WalkInOrder({
   const [catalogError, setCatalogError] = useState("");
   const [searchError, setSearchError] = useState("");
   const [refresh, setRefresh] = useState(0);
-  const [lines, setLines] = useState<Line[]>([newLine()]);
+  const [lines, setLines] = useState<Line[]>([]);
   const [note, setNote] = useState("");
   const [files, setFiles] = useState<{ name: string; data_url: string }[]>([]);
   const [method, setMethod] = useState<"cash" | "whish_money">("cash");
@@ -121,7 +122,7 @@ export function WalkInOrder({
   }, [query, mode]);
 
   const unitPrice = (line: Line) =>
-    line.product === "custom"
+    line.price !== ""
       ? Math.round(Number(line.price || 0) * 100)
       : (products.find((product) => String(product.product_id) === line.product)
           ?.price ?? 0);
@@ -157,6 +158,9 @@ export function WalkInOrder({
       );
       return;
     }
+    if (!lines.length || lines.some(line => line.product !== 'custom' && !products.some(product => String(product.product_id) === line.product)) || lines.some(line => line.price === '' && (line.product === 'custom' || products.find(product => String(product.product_id) === line.product)?.price == null))) {
+      setError('Choose an item and enter a unit price for any item without a catalog price.'); return;
+    }
     const payload = {
       ...(mode === "new"
         ? { customer }
@@ -167,7 +171,7 @@ export function WalkInOrder({
       items: lines.map((line) => ({
         ...(line.product === "custom"
           ? { name: line.name, unit_price: unitPrice(line) }
-          : { product_id: Number(line.product) }),
+          : { product_id: Number(line.product), ...(line.price !== "" ? { unit_price: unitPrice(line) } : {}) }),
         quantity: line.quantity,
         specifications: line.specifications,
       })),
@@ -224,14 +228,14 @@ export function WalkInOrder({
                 <button
                   type="button"
                   aria-pressed={mode === "new"}
-                  onClick={() => setMode("new")}
+                  onClick={() => { setMode("new"); setLines(current => current.map(line => line.product === "custom" ? line : { ...line, price: "" })); }}
                 >
                   <FaUserPlus /> New customer
                 </button>
                 <button
                   type="button"
                   aria-pressed={mode === "existing"}
-                  onClick={() => setMode("existing")}
+                  onClick={() => { setMode("existing"); setLines(current => current.map(line => line.product === "custom" ? line : { ...line, price: "" })); }}
                 >
                   <FaSearch /> Find existing
                 </button>
@@ -328,6 +332,7 @@ export function WalkInOrder({
                           }
                           onClick={() => {
                             setSelected(person);
+                            setLines(current => current.map(line => line.product === "custom" ? line : { ...line, price: "" }));
                             setContactPhone(person.phone);
                           }}
                         >
@@ -340,7 +345,7 @@ export function WalkInOrder({
                             </small>
                           </span>
                           <small>
-                            {person.kind === "account" ? "Account" : "Walk-in"}
+                            {person.role === "wholesaler" ? "Wholesale buyer" : person.kind === "account" ? "Account" : "Walk-in"}
                           </small>
                         </button>
                       ))
@@ -356,7 +361,7 @@ export function WalkInOrder({
                     <div className="counter-selected">
                       <FaCheckCircle />
                       <span>
-                        <strong>{selected.full_name}</strong>
+                        <strong>{selected.full_name} {selected.role === "wholesaler" && <span className="badge text-bg-warning">Wholesale</span>}</strong>
                         <small>
                           {selected.email || "No email"}
                           {selected.address ? ` · ${selected.address}` : ""}
@@ -401,6 +406,8 @@ export function WalkInOrder({
                   {catalogError}
                 </p>
               )}
+              <CounterCatalog key={catalogKey} products={products} disabled={loading || !!catalogError || lines.length >= 30} wholesale={mode === 'existing' && selected?.role === 'wholesaler'} onAdd={(product, quantity, specifications, price) => setLines(current => [...current, { ...newLine(), product: String(product.product_id), quantity, specifications, price }])} />
+              <p className="press-muted mt-3">Selected items · Customer changes refresh catalog prices and clear item price overrides.</p>
               {lines.map((line, index) => (
                 <div className="counter-line" key={line.id}>
                   <div className="counter-line-heading">
@@ -409,7 +416,7 @@ export function WalkInOrder({
                       type="button"
                       className="btn btn-sm"
                       aria-label={`Remove item ${index + 1}`}
-                      disabled={lines.length === 1}
+                      disabled={false}
                       onClick={() =>
                         setLines((current) =>
                           current.filter((item) => item.id !== line.id),
@@ -419,31 +426,7 @@ export function WalkInOrder({
                       <FaTrashAlt />
                     </button>
                   </div>
-                  <label className="w-100">
-                    Product or service
-                    <select
-                      className="form-select"
-                      required
-                      value={line.product}
-                      onChange={(e) =>
-                        updateLine(line.id, { product: e.target.value })
-                      }
-                    >
-                      <option value="">Choose a product…</option>
-                      <option value="custom">
-                        Custom service / customer-supplied material
-                      </option>
-                      {products.map((product) => (
-                        <option
-                          key={product.product_id}
-                          value={product.product_id}
-                        >
-                          {product.name} · {customerMoney(product.price)}
-                          {product.special_price ? " · Special price" : ""}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <div className="counter-picked-name"><strong>{line.product === 'custom' ? 'Custom service' : products.find(product => String(product.product_id) === line.product)?.name || 'Product unavailable'}</strong>{line.product !== 'custom' && <small>{loading ? 'Updating price…' : products.find(product => String(product.product_id) === line.product)?.price == null ? 'Wholesale price not set — enter an agreed price below' : `Catalog unit price: ${customerMoney(products.find(product => String(product.product_id) === line.product)!.price!)}${line.price !== '' ? ' · Price adjusted for this order' : ''}`}</small>}</div>
                   {line.product === "custom" && (
                     <label className="w-100 mt-3">
                       Service name
@@ -502,6 +485,7 @@ export function WalkInOrder({
                       </div>
                     )}
                   </div>
+                  {line.product !== 'custom' && <label className="w-100 mt-3">Edit unit price (USD) <small>optional — blank uses catalog price</small><input className="form-control" aria-label={`Edit unit price for item ${index + 1}`} type="number" min="0" max="999999.99" step="0.01" value={line.price} onChange={event => updateLine(line.id, { price: event.target.value })} placeholder="Use customer catalog price" /></label>}
                   <label className="w-100 mt-3">
                     Specifications <small>optional</small>
                     <input
@@ -520,9 +504,9 @@ export function WalkInOrder({
                 type="button"
                 className="counter-add"
                 disabled={lines.length >= 30}
-                onClick={() => setLines((current) => [...current, newLine()])}
+                onClick={() => setLines((current) => [...current, { ...newLine(), product: "custom" }])}
               >
-                <FaPlus /> Add another item
+                <FaPlus /> Add custom service
               </button>
             </section>
             <section className="counter-panel">
@@ -693,7 +677,7 @@ export function WalkInOrder({
             <button
               className="btn press-primary w-100"
               type="submit"
-              disabled={saving || reading || loading || !!catalogError}
+              disabled={saving || reading || loading || !!catalogError || !lines.length}
             >
               {saving
                 ? "Creating order…"

@@ -13,6 +13,8 @@ interface SignupPageProps {
 
 export const SignupPage: React.FC<SignupPageProps> = ({ onNavigateToLogin, onSignupSuccess, onNavigateHome }) => {
   const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [email, setEmail] = useState('');
@@ -30,7 +32,7 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onNavigateToLogin, onSig
     setSubmitting(true);
     setErrorMessage('');
     try {
-      const user = await signup(fullName, email, password);
+      const user = await signup(fullName, email, password, phone, address);
       onSignupSuccess?.(user);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to create the account.');
@@ -204,6 +206,14 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onNavigateToLogin, onSig
                     </InputGroup>
                   </Form.Group>
 
+                  <Form.Group className="mb-3" controlId="formPhone">
+                    <Form.Label className="text-dark fw-semibold">Phone number <small className="text-muted">optional</small></Form.Label>
+                    <Form.Control type="tel" autoComplete="tel" maxLength={50} value={phone} onChange={e => setPhone(e.target.value)} className="be-input bg-light" />
+                  </Form.Group>
+                  <Form.Group className="mb-3" controlId="formAddress">
+                    <Form.Label className="text-dark fw-semibold">Address <small className="text-muted">optional</small></Form.Label>
+                    <Form.Control as="textarea" rows={2} autoComplete="street-address" maxLength={500} value={address} onChange={e => setAddress(e.target.value)} className="be-input bg-light" />
+                  </Form.Group>
                   <Form.Group className="mb-3" controlId="formPassword">
                     <Form.Label className="text-dark fw-semibold" style={{ fontSize: '0.85rem' }}>Password</Form.Label>
                     <InputGroup className="be-input-group rounded-3 overflow-hidden border" style={{ borderColor: '#e4e7ec' }}>

@@ -1,8 +1,13 @@
 from sqlalchemy.orm import Session, defer
-from models import Order, OrderItem, OrderPayment, DesignFile, OrderItemDesign
+from models import Order, OrderItem, OrderPayment, DesignFile, OrderItemDesign, User, WalkInCustomer
 
 
 def order_response(order: Order, db: Session):
+    # Older orders did not always snapshot contact details. Fill only missing
+    # display values from the linked customer, without rewriting order history.
+    person = None
+    if not order.customer_address or not order.contact_phone:
+        person = db.get(User, order.customer_id) if order.customer_id is not None else db.get(WalkInCustomer, order.walk_in_customer_id) if order.walk_in_customer_id is not None else None
     items = db.query(OrderItem).filter(OrderItem.order_id == order.order_id).order_by(OrderItem.order_item_id).all()
     files = db.query(DesignFile).options(defer(DesignFile.content)).filter(DesignFile.order_id == order.order_id).all()
     payment = db.query(OrderPayment).filter(OrderPayment.order_id == order.order_id).first()
@@ -10,14 +15,14 @@ def order_response(order: Order, db: Session):
     return {
         "order_id": order.order_id,
         "order_type": order.order_type,
-        "customer_address": order.customer_address,
+        "customer_address": order.customer_address or (person.address if person else None),
         "amount_paid": int(payment.amount * 100) if payment and payment.status == "verified" else 0,
         "amount_due": max(0, int(order.total_amount * 100) - (int(payment.amount * 100) if payment and payment.status == "verified" else 0)),
         "created_at": order.created_at,
         "production_stage": order.production_stage,
         "payment_status": order.payment_status,
         "total": int(order.total_amount * 100),
-        "contact_phone": order.contact_phone,
+        "contact_phone": order.contact_phone or (person.phone if person else None),
         "design_request_note": order.design_request_note,
         "payment_reference": payment.reference if payment else None,
         "payment_method": order.payment_method,

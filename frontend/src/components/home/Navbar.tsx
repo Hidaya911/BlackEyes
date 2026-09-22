@@ -107,6 +107,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onNavigateToLogin, onNavigateToS
               <span className="position-absolute bottom-0 start-0 w-100 d-none d-lg-block" style={{ height: '2px', background: 'linear-gradient(90deg, #00d2ff, #ff007f)' }}></span>
             </Nav.Link>
             <Nav.Link href="#services" className="text-muted" onClick={() => setExpanded(false)}>Products</Nav.Link>
+            <Nav.Link href="#wholesale" className="text-muted" onClick={() => setExpanded(false)}>Wholesale</Nav.Link>
             <Nav.Link href="#about" className="text-muted" onClick={() => setExpanded(false)}>About</Nav.Link>
             <Nav.Link href="#contact" className="text-muted" onClick={() => setExpanded(false)}>Contact</Nav.Link>
           </Nav>

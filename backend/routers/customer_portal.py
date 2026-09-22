@@ -72,13 +72,16 @@ def portal_config(customer: User = Depends(require_customer)):
 
 @router.put("/profile")
 def update_profile(payload: ProfileRequest, customer: User = Depends(require_customer), db: Session = Depends(get_db)):
-    set_profile_image(customer, payload.profile_image)
+    if "profile_image" in payload.model_fields_set:
+        set_profile_image(customer, payload.profile_image)
     if db.query(User).filter(User.email == payload.email, User.user_id != customer.user_id).first():
         raise HTTPException(status_code=409, detail="That email is already in use.")
     customer.full_name = payload.full_name
     customer.email = payload.email
-    customer.phone = payload.phone or None
-    customer.address = payload.address or None
+    if "phone" in payload.model_fields_set:
+        customer.phone = payload.phone or None
+    if "address" in payload.model_fields_set:
+        customer.address = payload.address or None
     commit(db, "That email is already in use.")
     return profile_response(customer)
 
@@ -156,7 +159,8 @@ def place_order(payload: OrderRequest, customer: User = Depends(require_customer
     order = Order(
         customer_id=customer.user_id, total_amount=Decimal(total) / 100,
         contact_phone=payload.contact_phone, customer_name=customer.full_name,
-        customer_email=customer.email, design_request_note=payload.design_request_note or None,
+        customer_email=customer.email, customer_address=customer.address or None,
+        design_request_note=payload.design_request_note or None,
         request_key=str(payload.request_key), production_stage="Awaiting review",
         request_fingerprint=fingerprint,
         payment_method=payload.payment_method, payment_timing=payload.payment_timing,

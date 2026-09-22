@@ -11,7 +11,8 @@ class User(Base):
     full_name = Column(String, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
-    role = Column(String, default="customer", nullable=False)  # enforces: admin | staff | customer
+    role = Column(String, default="customer", nullable=False)  # admin | staff | customer | wholesaler
+    business_name = Column(String(255), nullable=True)
     phone = Column(String, nullable=True)
     address = Column(String, nullable=True)
     profile_image = deferred(Column(String, nullable=True))

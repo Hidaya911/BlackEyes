@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'staff' | 'customer';
+export type UserRole = 'admin' | 'staff' | 'customer' | 'wholesaler';
 
 export interface AuthUser {
   user_id: number;
@@ -30,8 +30,8 @@ const request = async <T>(path: string, body: Record<string, string>): Promise<T
   return response.json() as Promise<T>;
 };
 
-export const signup = (full_name: string, email: string, password: string) =>
-  request<AuthUser>('/api/auth/signup', { full_name, email, password });
+export const signup = (full_name: string, email: string, password: string, phone = '', address = '') =>
+  request<AuthUser>('/api/auth/signup', { full_name, email, password, phone, address });
 
 export const login = (email: string, password: string) =>
   request<AuthUser>('/api/auth/login', { email, password });
@@ -47,7 +47,7 @@ export const updateAdminSettings = async (admin_id: number, data: Record<string,
   return response.json() as Promise<AuthUser>;
 };
 
-export interface Product { product_id: number; name: string; description: string | null; price: number; image_url: string | null; status: string; }
+export interface Product { product_id: number; name: string; description: string | null; price: number; wholesale_price: number | null; image_url: string | null; status: string; }
 export const getProducts = (adminId: number) => fetch(`/api/admin/products?admin_id=${adminId}`).then(async response => { if (!response.ok) throw new Error('Unable to load products.'); return response.json() as Promise<Product[]>; });
 export const saveProduct = async (adminId: number, data: Record<string, string>, productId?: number) => {
   const response = await fetch(productId ? `/api/admin/products/${productId}` : '/api/admin/products', {

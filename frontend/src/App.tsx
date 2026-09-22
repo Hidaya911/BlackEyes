@@ -3,6 +3,7 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import './index.css';
 
 import { Navbar } from './components/home/Navbar';
+import { WholesaleRegistration } from './components/home/WholesaleRegistration';
 import { Hero } from './components/home/Hero';
 import { FeaturesBar } from './components/home/FeaturesBar';
 import { Services } from './components/home/Services';
@@ -26,7 +27,7 @@ const USER_KEY = 'blackeyes:user';
 const getInitialPage = (): Page => {
   const stored = sessionStorage.getItem(STORAGE_KEY);
   if (new URLSearchParams(window.location.search).has('reset_token')) return 'reset';
-  return stored === 'login' || stored === 'signup' || stored === 'forgot' || stored === 'admin' || stored === 'staff' || stored === 'customer'
+  return stored === 'login' || stored === 'signup' || stored === 'forgot' || stored === 'admin' || stored === 'staff' || stored === 'customer' || stored === 'wholesaler'
     ? stored
     : 'home';
 };
@@ -85,6 +86,7 @@ export function App() {
 
   if (page === 'admin') return <AdminPage onNavigateHome={logout} adminId={currentUser?.user_id} user={currentUser} />;
   if (page === 'staff') return <StaffPage onLogout={logout} onProfileSaved={saveCurrentProfile} />;
+  if (page === 'wholesaler') return <main className="container py-5"><div className="p-5 bg-light rounded-4"><span className="badge text-bg-warning">Wholesale buyer</span><h1 className="mt-3">Welcome, {currentUser?.full_name}.</h1><p>Your business details are registered with Blackeyes. Please contact the press for your wholesale requests. Online wholesale ordering is not available yet.</p><button className="btn btn-dark" onClick={logout}>Log out</button></div></main>;
   if (page === 'customer') return <CustomerPage onLogout={logout} onProfileSaved={saveCurrentProfile} />;
 
   return (
@@ -93,6 +95,7 @@ export function App() {
       <Hero onStartProject={goToLogin} />
       <FeaturesBar />
       <Services />
+      <WholesaleRegistration />
       <AboutSection />
       <Footer />
     </div>

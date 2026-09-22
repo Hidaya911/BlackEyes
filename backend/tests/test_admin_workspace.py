@@ -160,6 +160,181 @@ class AdminWorkspaceTests(unittest.TestCase):
         self.assertEqual(reviewed.status_code, 200, reviewed.text)
         self.assertEqual(reviewed.json()['files'][0]['verification_status'], 'verified')
 
+    def wholesale_registration(self):
+        return dict(full_name='Wholesale Buyer', business_name='Print Shop', email='BUYER@example.com', phone='12345678', address='Beirut, Main Street', password='safe-password')
+
+    def test_wholesale_registration_directory_and_permissions(self):
+        from sessions import pwd_context
+        payload = self.wholesale_registration()
+        result = self.client.post('/api/wholesale/register', json=payload)
+        self.assertEqual(result.status_code, 201, result.text)
+        buyer = self.db.query(User).filter_by(email='buyer@example.com').one()
+        self.assertEqual(buyer.role, 'wholesaler')
+        self.assertEqual(buyer.business_name, 'Print Shop')
+        self.assertTrue(pwd_context.verify(payload['password'], buyer.password_hash))
+        self.assertNotIn('password', result.text)
+        self.assertEqual(self.client.post('/api/wholesale/register', json=payload).status_code, 409)
+        self.assertEqual(self.client.post('/api/wholesale/register', json={**payload, 'email':'second@example.com', 'role':'admin'}).status_code, 422)
+        for change in [dict(email='bad-email'), dict(phone=' '), dict(business_name=' '), dict(password='short')]:
+            self.assertEqual(self.client.post('/api/wholesale/register', json={**payload, **change}).status_code, 422)
+        listing = self.client.get('/api/admin/customers').json()
+        self.assertEqual(next(c for c in listing if c['id'] == buyer.user_id and c['kind'] == 'account')['role'], 'wholesaler')
+        self.admin.role = 'staff'
+        self.db.commit()
+        directory = self.client.get('/api/press/customers/directory')
+        self.assertEqual(directory.status_code, 200)
+        self.assertIn('Print Shop', directory.text)
+        self.assertNotIn('password_hash', directory.text)
+        self.assertEqual(self.client.delete(f'/api/admin/customers/account/{buyer.user_id}').status_code, 403)
+        self.actor = buyer
+        self.assertEqual(self.client.get('/api/press/customers/directory').status_code, 403)
+        login = self.client.post('/api/auth/login', json=dict(email=payload['email'], password=payload['password']))
+        self.assertEqual(login.status_code, 200, login.text)
+        self.assertEqual(login.json()['role'], 'wholesaler')
+        self.assertEqual(self.client.get('/api/customer/orders').status_code, 403)
+
+    def test_product_retail_and_wholesale_prices(self):
+        payload = dict(admin_id=self.admin.user_id, name='Business cards', price=2000, wholesale_price=1500)
+        created = self.client.post('/api/admin/products', json=payload)
+        self.assertEqual(created.status_code, 201, created.text)
+        product_id = created.json()['product_id']
+        self.assertEqual(created.json()['price'], 2000)
+        self.assertEqual(created.json()['wholesale_price'], 1500)
+        updated = self.client.put(f'/api/admin/products/{product_id}', json={**payload, 'wholesale_price':1250})
+        self.assertEqual(updated.status_code, 200, updated.text)
+        self.assertEqual(updated.json()['wholesale_price'], 1250)
+        self.assertEqual(updated.json()['price'], 2000)
+        self.assertEqual(self.client.post('/api/admin/products', json={**payload, 'wholesale_price':-1}).status_code, 422)
+        self.assertEqual(self.client.post('/api/admin/products', json={k:v for k,v in payload.items() if k != 'wholesale_price'}).status_code, 422)
+        self.product.wholesale_price = 40
+        self.db.commit()
+        order = self.client.post('/api/press/orders', json=self.order())
+        self.assertEqual(order.status_code, 201, order.text)
+        self.assertEqual(order.json()['total'], 100)
+
+    def test_wholesale_schema_upgrade_is_repeatable(self):
+        from sqlalchemy import text, inspect
+        from schemas import apply_schema_updates
+        engine = create_engine('sqlite://')
+        try:
+            with engine.begin() as connection:
+                connection.execute(text('CREATE TABLE users (user_id INTEGER PRIMARY KEY, role VARCHAR)'))
+                connection.execute(text('CREATE TABLE products (product_id INTEGER PRIMARY KEY, price INTEGER)'))
+                connection.execute(text('INSERT INTO products VALUES (1, 100)'))
+            apply_schema_updates(engine)
+            apply_schema_updates(engine)
+            self.assertIn('business_name', {c['name'] for c in inspect(engine).get_columns('users')})
+            with engine.connect() as connection:
+                row = connection.execute(text('SELECT price, wholesale_price FROM products')).one()
+                self.assertEqual(tuple(row), (100, None))
+        finally:
+            engine.dispose()
+
+    def test_counter_catalog_wholesale_and_overrides(self):
+        self.client.post('/api/wholesale/register', json=self.wholesale_registration())
+        buyer = self.db.query(User).filter_by(email='buyer@example.com').one()
+        self.product.wholesale_price = 60
+        self.product.description = 'A4 color printing'
+        self.product.image_url = '/images/a4.png'
+        self.db.commit()
+        self.link()
+        self.admin.role = 'staff'
+        self.db.commit()
+        matches = self.client.get('/api/press/customers?q=Print%20Shop').json()
+        self.assertEqual(matches[0]['role'], 'wholesaler')
+        catalog = self.client.get(f'/api/press/catalog?customer_id={buyer.user_id}').json()[0]
+        self.assertEqual(catalog['price'], 60)
+        self.assertEqual(catalog['price_kind'], 'wholesale')
+        self.assertEqual(catalog['image_url'], '/images/a4.png')
+        self.assertEqual(self.client.get('/api/press/catalog').json()[0]['price'], 100)
+        payload = {**self.order(2), 'customer_id':buyer.user_id, 'expected_total':120, 'amount_paid':0}
+        created = self.client.post('/api/press/orders', json=payload)
+        self.assertEqual(created.status_code, 201, created.text)
+        self.assertEqual(created.json()['total'], 120)
+        self.assertEqual(self.client.get(f'/api/press/customer-ledger/account/{buyer.user_id}').json()['due'], 120)
+        override = {**payload, 'request_key':str(uuid4()), 'expected_total':100, 'items':[dict(product_id=self.product.product_id, quantity=2, unit_price=50, specifications='Double sided, matte')]}
+        result = self.client.post('/api/press/orders', json=override)
+        self.assertEqual(result.status_code, 201, result.text)
+        self.assertEqual(result.json()['items'][0]['unit_price'], 50)
+        self.assertEqual(result.json()['items'][0]['specifications'], 'Double sided, matte')
+        self.assertEqual(self.client.post('/api/press/orders', json=override).status_code, 201)
+        self.db.refresh(self.item)
+        self.db.refresh(self.product)
+        self.assertEqual(self.item.quantity_on_hand, 1)
+        self.assertEqual(self.product.price, 100)
+        self.assertEqual(self.product.wholesale_price, 60)
+
+    def test_counter_missing_wholesale_price_and_override_validation(self):
+        self.client.post('/api/wholesale/register', json=self.wholesale_registration())
+        buyer = self.db.query(User).filter_by(email='buyer@example.com').one()
+        payload = {**self.order(), 'customer_id':buyer.user_id, 'amount_paid':0}
+        self.assertIsNone(self.client.get(f'/api/press/catalog?customer_id={buyer.user_id}').json()[0]['price'])
+        self.assertEqual(self.client.post('/api/press/orders', json=payload).status_code, 422)
+        for price in [-1, 1.5, 100000000]:
+            invalid = {**payload, 'items':[dict(product_id=self.product.product_id, quantity=1, unit_price=price)]}
+            self.assertEqual(self.client.post('/api/press/orders', json=invalid).status_code, 422)
+        zero = {**payload, 'expected_total':0, 'items':[dict(product_id=self.product.product_id, quantity=1, unit_price=0)]}
+        self.assertEqual(self.client.post('/api/press/orders', json=zero).status_code, 201)
+        normal_override = {**self.order(), 'items':[dict(product_id=self.product.product_id, quantity=1, unit_price=80)], 'expected_total':80}
+        self.assertEqual(self.client.post('/api/press/orders', json=normal_override).status_code, 201)
+        stale = {**self.order(), 'expected_total':90}
+        self.assertEqual(self.client.post('/api/press/orders', json=stale).status_code, 409)
+        self.actor = buyer
+        self.assertEqual(self.client.post('/api/press/orders', json=normal_override).status_code, 403)
+
+    def test_signup_and_admin_contacts_reach_directories(self):
+        contact = dict(full_name='Contact Test', email='contact@test.local', password='safe-password', phone='+961 71 123456', address='Beirut, Test Street')
+        registered = self.client.post('/api/auth/signup', json=contact)
+        self.assertEqual(registered.status_code, 201, registered.text)
+        account_id = registered.json()['user_id']
+        for field in ('phone', 'address'):
+            self.assertEqual(registered.json()[field], contact[field])
+        created = self.client.post('/api/admin/customers/account', json={**contact, 'email':'admin-contact@test.local'})
+        self.assertEqual(created.status_code, 201, created.text)
+        admin_id = created.json()['id']
+        for endpoint in ['/api/admin/customers', '/api/press/customers/directory', '/api/press/customers?q=Contact']:
+            rows = self.client.get(endpoint).json()
+            for identity in (account_id, admin_id):
+                row = next(r for r in rows if r['kind'] == 'account' and r['id'] == identity)
+                self.assertEqual(row['phone'], contact['phone'])
+                self.assertEqual(row['address'], contact['address'])
+        updated = self.client.put(f'/api/admin/customers/account/{admin_id}', json=dict(full_name='Renamed', email='admin-contact@test.local'))
+        self.assertEqual(updated.status_code, 200, updated.text)
+        self.assertEqual(updated.json()['phone'], contact['phone'])
+        self.assertEqual(updated.json()['address'], contact['address'])
+        self.actor = self.db.get(User, account_id)
+        profile = self.client.put('/api/customer/profile', json=dict(full_name='Renamed', email=contact['email']))
+        self.assertEqual(profile.status_code, 200, profile.text)
+        self.assertEqual(profile.json()['phone'], contact['phone'])
+        self.assertEqual(profile.json()['address'], contact['address'])
+        cleared = self.client.put('/api/customer/profile', json=dict(full_name='Renamed', email=contact['email'], phone='', address=''))
+        self.assertIsNone(cleared.json()['phone'])
+        self.assertIsNone(cleared.json()['address'])
+
+    def test_order_contacts_snapshot_and_legacy_display(self):
+        self.customer.address = 'Saved address'
+        self.db.commit()
+        self.actor = self.customer
+        created = self.client.post('/api/customer/orders', json=self.design_order([dict(quantity=2, brief='Print this')]))
+        self.assertEqual(created.status_code, 201, created.text)
+        self.assertEqual(created.json()['customer_address'], 'Saved address')
+        order = self.db.get(Order, created.json()['order_id'])
+        order.customer_address = None
+        order.contact_phone = ''
+        self.db.commit()
+        self.actor = self.admin
+        document = self.client.get(f'/api/press/orders/{order.order_id}/documents/invoice').json()['order']
+        self.assertEqual(document['customer_address'], 'Saved address')
+        self.assertEqual(document['contact_phone'], self.customer.phone)
+        self.db.refresh(order)
+        self.assertIsNone(order.customer_address)
+        order.customer_address = 'Original order address'
+        order.contact_phone = '999999'
+        self.db.commit()
+        displayed = self.client.get('/api/press/orders').json()[0]
+        self.assertEqual(displayed['customer_address'], 'Original order address')
+        self.assertEqual(displayed['contact_phone'], '999999')
+
     def test_threshold_retry_and_report(self):
         self.link()
         payload = self.order()

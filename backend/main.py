@@ -22,6 +22,7 @@ from schemas import apply_schema_updates
 from routers import admin_customers, admin_inventory, admin_reports
 from routers import order_documents
 from routers import customer_ledger
+from routers import wholesale
 
 app = FastAPI()
 
@@ -34,6 +35,8 @@ app.add_middleware(
 )
 
 for router in (
+    wholesale.router,
+    admin_customers.directory_router,
     customer_ledger.router,
     order_documents.router,
     admin_customers.router,

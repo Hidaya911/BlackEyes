@@ -8,8 +8,10 @@ from database import get_db
 from models import User, WalkInCustomer, Order, UserSession, CustomerSpecialPrice
 from sessions import current_user, pwd_context
 from utilities.database import commit
+from access import require_operator
 
 router = APIRouter(prefix="/api/admin/customers", tags=["Customers"])
+directory_router = APIRouter(prefix="/api/press/customers", tags=["Customer directory"])
 
 
 def admin_session(user: User = Depends(current_user)):
@@ -40,7 +42,7 @@ class CustomerInput(BaseModel):
 def record(db, kind, customer_id):
     if kind not in {"account", "walk_in"}:
         raise HTTPException(404, "Customer not found.")
-    query = db.query(User).filter(User.user_id == customer_id, User.role == "customer") if kind == "account" else db.query(WalkInCustomer).filter(WalkInCustomer.customer_id == customer_id)
+    query = db.query(User).filter(User.user_id == customer_id, User.role.in_(["customer", "wholesaler"])) if kind == "account" else db.query(WalkInCustomer).filter(WalkInCustomer.customer_id == customer_id)
     person = query.with_for_update().first()
     if not person:
         raise HTTPException(404, "Customer not found.")
@@ -50,13 +52,16 @@ def record(db, kind, customer_id):
 def response(person, kind):
     return dict(id=person.user_id if kind == "account" else person.customer_id, kind=kind,
         full_name=person.full_name, email=person.email or "", phone=person.phone or "",
-        address=person.address or "", status=person.status if kind == "account" else "active")
+        address=person.address or "", status=person.status if kind == "account" else "active",
+        role=person.role if kind == "account" else "customer",
+        business_name=person.business_name or "" if kind == "account" else "")
 
 
 @router.get("")
-def list_customers(admin=Depends(admin_session), db: Session = Depends(get_db)):
+@directory_router.get("/directory")
+def list_customers(admin=Depends(require_operator), db: Session = Depends(get_db)):
     return [response(p, kind) for kind, records in (
-        ("account", db.query(User).filter(User.role == "customer").order_by(User.full_name).all()),
+        ("account", db.query(User).filter(User.role.in_(["customer", "wholesaler"])).order_by(User.full_name).all()),
         ("walk_in", db.query(WalkInCustomer).order_by(WalkInCustomer.full_name).all())) for p in records]
 
 
@@ -83,7 +88,7 @@ def update_customer(kind: str, customer_id: int, payload: CustomerInput, admin=D
         raise HTTPException(422, "Email is required.")
     if kind == "walk_in" and len(payload.phone) < 3:
         raise HTTPException(422, "Enter a contact phone.")
-    for key, value in payload.model_dump(exclude={"password", "status"}).items():
+    for key, value in payload.model_dump(exclude={"password", "status"}, exclude_unset=True).items():
         setattr(person, key, value)
     if kind == "account":
         person.status = payload.status

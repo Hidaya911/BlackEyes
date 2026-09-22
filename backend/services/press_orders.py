@@ -25,6 +25,7 @@ from models import (
 from schemas.requests.press import LocalOrderRequest
 from services.order_details import order_response
 from services.inventory import consume_materials
+from services.counter_pricing import counter_price
 from utilities.files import decode_artwork, MAX_TOTAL_FILE_BYTES
 
 
@@ -42,16 +43,19 @@ def customer_options(db: Session, query: str):
     for model, kind, id_name in sources:
         records = db.query(model)
         if model is User:
-            records = records.filter(User.role == "customer", User.status == "active")
+            records = records.filter(User.role.in_(["customer", "wholesaler"]), User.status == "active")
         if query:
             records = records.filter(or_(
                 model.full_name.icontains(query, autoescape=True),
                 model.phone.icontains(query, autoescape=True),
                 model.email.icontains(query, autoescape=True),
+                *( [User.business_name.icontains(query, autoescape=True)] if model is User else [] ),
             ))
         for person in records.order_by(model.full_name).limit(20).all():
             results.append({
                 "id": getattr(person, id_name), "kind": kind,
+                "role": person.role if kind == "account" else "customer",
+                "business_name": person.business_name if kind == "account" else None,
                 "full_name": person.full_name, "phone": person.phone or "",
                 "email": person.email or "", "address": person.address or "",
             })
@@ -60,9 +64,10 @@ def customer_options(db: Session, query: str):
 
 def catalog(db: Session, customer_id: int | None):
     prices = {}
+    customer = None
     if customer_id:
         customer = db.query(User).filter(
-            User.user_id == customer_id, User.role == "customer", User.status == "active"
+            User.user_id == customer_id, User.role.in_(["customer", "wholesaler"]), User.status == "active"
         ).first()
         if not customer:
             raise HTTPException(status_code=404, detail="Customer account not found.")
@@ -74,8 +79,10 @@ def catalog(db: Session, customer_id: int | None):
         }
     return [{
         "product_id": product.product_id, "name": product.name,
-        "price": prices.get(product.product_id, product.price),
-        "special_price": product.product_id in prices,
+        "price": counter_price(product, customer, prices)[0],
+        "price_kind": counter_price(product, customer, prices)[1],
+        "special_price": counter_price(product, customer, prices)[1] == "special",
+        "description": product.description, "image_url": product.image_url,
     } for product in db.query(Product).filter(
         Product.status == "active"
     ).order_by(Product.name).all()]
@@ -94,7 +101,7 @@ def create_local_order(payload: LocalOrderRequest, operator: User, db: Session):
     if payload.customer_id:
         customer = db.query(User).filter(
             User.user_id == payload.customer_id,
-            User.role == "customer", User.status == "active",
+            User.role.in_(["customer", "wholesaler"]), User.status == "active",
         ).with_for_update().first()
     elif payload.walk_in_customer_id:
         customer = db.get(WalkInCustomer, payload.walk_in_customer_id)
@@ -123,7 +130,9 @@ def create_local_order(payload: LocalOrderRequest, operator: User, db: Session):
         product = products.get(item.product_id)
         if item.product_id and not product:
             raise HTTPException(status_code=409, detail="A product is no longer available. Refresh the catalog.")
-        price = prices.get(product.product_id, product.price) if product else item.unit_price
+        price = item.unit_price if item.unit_price is not None else counter_price(product, customer, prices)[0]
+        if price is None:
+            raise HTTPException(422, f"Wholesale price is not set for {product.name}. Enter an agreed unit price or ask an admin to set its wholesale price.")
         lines.append((item, product.name if product else item.name, price, price * item.quantity))
     total = sum(line[3] for line in lines)
     if total > 99_999_999_999_999:

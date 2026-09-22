@@ -9,6 +9,7 @@ class Product(Base):
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
     price = Column(Integer, nullable=False)  # stored in cents
+    wholesale_price = Column(Integer, nullable=True)  # cents; unset on legacy products
     image_url = Column(String, nullable=True)
     status = Column(String, default="active", nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

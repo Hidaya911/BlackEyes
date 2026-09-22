@@ -2,13 +2,15 @@ import { useEffect, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { FaArrowRight, FaCheckCircle, FaEnvelope, FaGlobe, FaMapMarkerAlt, FaPen, FaPhoneAlt, FaPlus, FaSearch, FaStore, FaSyncAlt, FaTrash, FaUsers } from 'react-icons/fa';
 import { adminRequest, type AdminCustomer } from '../../api/admin';
+import { pressRequest } from '../../api/press';
 import { CustomerFormModal } from './CustomerFormModal';
 import '../../style/CustomerManager.css';
 
 const blank = { full_name: '', email: '', phone: '', address: '', status: 'active', password: '' };
 const initials = (name: string) => name.trim().split(/\s+/).filter(Boolean).map(word => word[0]).filter((_, index, words) => index === 0 || index === words.length - 1).join('').toUpperCase() || '?';
 
-export function CustomerManager() {
+export function CustomerManager({ readOnly = false }: { readOnly?: boolean }) {
+  const fetchDirectory = () => readOnly ? pressRequest<AdminCustomer[]>('/customers/directory') : adminRequest<AdminCustomer[]>('/customers');
   const [customers, setCustomers] = useState<AdminCustomer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -26,16 +28,16 @@ export function CustomerManager() {
 
   async function load() {
     setLoading(true); setError('');
-    try { setCustomers(await adminRequest<AdminCustomer[]>('/customers')); }
+    try { setCustomers(await fetchDirectory()); }
     catch (e) { setError((e as Error).message); }
     finally { setLoading(false); }
   }
   useEffect(() => {
     let active = true;
-    adminRequest<AdminCustomer[]>('/customers').then(result => { if (active) setCustomers(result); })
+    (readOnly ? pressRequest<AdminCustomer[]>('/customers/directory') : adminRequest<AdminCustomer[]>('/customers')).then(result => { if (active) setCustomers(result); })
       .catch(e => { if (active) setError(e.message); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, []);
+  }, [readOnly]);
 
   function edit(customer: AdminCustomer | null) {
     setEditing(customer); setKind(customer?.kind ?? 'account');
@@ -67,25 +69,25 @@ export function CustomerManager() {
   const walkIns = customers.length - accounts.length;
   const activeAccounts = accounts.filter(c => c.status === 'active').length;
   const filtered = customers.filter(c =>
-    `${c.full_name} ${c.email} ${c.phone} ${c.address}`.toLowerCase().includes(search.trim().toLowerCase()) &&
-    (filter === 'all' || c.kind === filter) && (status === 'all' || (c.kind === 'account' && c.status === status)),
+    `${c.full_name} ${c.business_name ?? ''} ${c.email} ${c.phone} ${c.address}`.toLowerCase().includes(search.trim().toLowerCase()) &&
+    (filter === 'all' || (filter === 'wholesaler' ? c.role === 'wholesaler' : c.kind === filter)) && (status === 'all' || (c.kind === 'account' && c.status === status)),
   ).sort((a, b) => a.full_name.localeCompare(b.full_name));
 
   return <section className="customer-manager">
-    <header className="crm-hero"><div><span className="crm-eyebrow">BLACKEYES / THE CUSTOMER BOOK</span><h2>Behind every print,<br /><em>there’s a person.</em></h2><p>Your regulars, new faces, and online creators. Keep every connection close.</p><button className="crm-button crm-button-mint" onClick={() => edit(null)}><FaPlus /> New customer <FaArrowRight /></button></div><div className="crm-hero-illustration" aria-hidden="true"><div className="crm-floating-card crm-floating-back"><FaGlobe /><span>ONLINE CREATORS</span><i /><i /></div><div className="crm-floating-card crm-floating-front"><div className="crm-illustration-avatars"><b>M</b><b>R</b><b>J</b></div><strong>Made for people.</strong><span>PRINTED WITH CARE.</span><div className="crm-ink-dots"><i /><i /><i /></div></div><span className="crm-orbit-dot" /></div></header>
+    <header className="crm-hero"><div><span className="crm-eyebrow">BLACKEYES / THE CUSTOMER BOOK</span><h2>Behind every print,<br /><em>there’s a person.</em></h2><p>Your regulars, new faces, and online creators. Keep every connection close.</p>{!readOnly && <button className="crm-button crm-button-mint" onClick={() => edit(null)}><FaPlus /> New customer <FaArrowRight /></button>}</div><div className="crm-hero-illustration" aria-hidden="true"><div className="crm-floating-card crm-floating-back"><FaGlobe /><span>ONLINE CREATORS</span><i /><i /></div><div className="crm-floating-card crm-floating-front"><div className="crm-illustration-avatars"><b>M</b><b>R</b><b>J</b></div><strong>Made for people.</strong><span>PRINTED WITH CARE.</span><div className="crm-ink-dots"><i /><i /><i /></div></div><span className="crm-orbit-dot" /></div></header>
     <div className="crm-stats">{[
       { label: 'All customers', count: customers.length, note: 'Your growing address book', Icon: FaUsers },
       { label: 'Portal accounts', count: accounts.length, note: 'Connected to your online studio', Icon: FaGlobe },
       { label: 'Walk-in contacts', count: walkIns, note: 'Familiar faces at the counter', Icon: FaStore },
-      { label: 'Active accounts', count: activeAccounts, note: 'Ready to sign in & order', Icon: FaCheckCircle },
+      { label: 'Active accounts', count: activeAccounts, note: 'Active customer and buyer accounts', Icon: FaCheckCircle },
     ].map(({ label, count, note, Icon }) => <article key={label}><span className="crm-stat-icon"><Icon /></span><div><small>{label}</small><strong>{loading || error ? '—' : count}</strong><p>{note}</p></div></article>)}</div>
     {notice && <div className="crm-notice" role="status"><FaCheckCircle /><span>{notice}</span><button aria-label="Dismiss notification" onClick={() => setNotice('')}>×</button></div>}
     {error && <div className="alert alert-danger" role="alert">{error} <button className="btn btn-sm btn-outline-danger" onClick={load}>Retry</button></div>}
     <div className="crm-directory"><div className="crm-directory-heading"><div><span className="crm-eyebrow">YOUR COMMUNITY</span><h3>People in your corner</h3></div><button className="crm-button" disabled={loading} onClick={load}><FaSyncAlt /> Refresh</button></div>
       <div className="crm-toolbar"><label className="crm-search"><FaSearch /><input type="search" aria-label="Search customers" placeholder="Find a name, email, phone, or address…" value={search} onChange={e => setSearch(e.target.value)} /></label><select aria-label="Filter account status" value={status} onChange={e => setStatus(e.target.value)}><option value="all">All statuses</option><option value="active">Active portal accounts</option><option value="inactive">Inactive portal accounts</option></select></div>
-      <div className="crm-filter-row"><div className="crm-filters" role="group" aria-label="Customer type filter">{[['all', 'Everyone', customers.length], ['account', 'Portal', accounts.length], ['walk_in', 'Walk-in', walkIns]].map(([value, label, count]) => <button key={value} aria-pressed={filter === value} className={filter === value ? 'is-selected' : ''} onClick={() => setFilter(String(value))}>{label}<span>{loading || error ? '—' : count}</span></button>)}</div><small aria-live="polite">{!loading && !error && `${filtered.length} ${filtered.length === 1 ? 'customer' : 'customers'} · A–Z`}</small></div>
-      {loading ? <div className="crm-empty" role="status"><div className="spinner-border spinner-border-sm" /><h4>Opening your customer book…</h4></div> : !error && <div className="crm-customer-grid">{filtered.map(customer => <article className={`crm-customer-card ${customer.kind === 'walk_in' ? 'is-walk-in' : ''}`} key={`${customer.kind}-${customer.id}`}><div className="crm-card-identity"><span className="crm-avatar" aria-hidden="true">{initials(customer.full_name)}</span><div><small>{customer.kind === 'account' ? 'PORTAL ACCOUNT' : 'WALK-IN CONTACT'}</small><h4>{customer.full_name}</h4></div><span className={`crm-status-dot ${customer.kind === 'account' && customer.status !== 'active' ? 'is-inactive' : ''}`} title={customer.kind === 'account' ? customer.status : 'Saved contact'} aria-label={customer.kind === 'account' ? customer.status : 'Saved contact'} /></div><div className="crm-contact-lines"><div><FaEnvelope /><span>{customer.email || <em>No email added</em>}</span></div><div><FaPhoneAlt /><span>{customer.phone || <em>No phone added</em>}</span></div><div><FaMapMarkerAlt /><span>{customer.address || <em>No address added</em>}</span></div></div><footer><span className="crm-type-badge">{customer.kind === 'account' ? <FaGlobe /> : <FaStore />}{customer.kind === 'account' ? customer.status === 'active' ? 'Portal access active' : 'Portal access inactive' : 'Counter customer'}</span><div><button className="crm-edit-button" aria-label={`Edit ${customer.full_name}`} onClick={() => edit(customer)}><FaPen /> Edit</button><button className="crm-delete-button" aria-label={`Delete ${customer.full_name}`} onClick={() => { setRemoving(customer); setModalError(''); }}><FaTrash /></button></div></footer></article>)}
-        {!filtered.length && <div className="crm-empty"><span className="crm-empty-icon"><FaUsers /></span><h4>{customers.length ? 'No connections found here.' : 'Your customer book starts here.'}</h4><p>{customers.length ? 'Try another search or clear your filters.' : 'Add your first customer and make the next order easier.'}</p><button className="crm-button crm-button-primary" onClick={() => customers.length ? (setSearch(''), setFilter('all'), setStatus('all')) : edit(null)}>{customers.length ? 'Clear filters' : 'Add your first customer'} <FaArrowRight /></button></div>}
+      <div className="crm-filter-row"><div className="crm-filters" role="group" aria-label="Customer type filter">{[['all', 'Everyone', customers.length], ['account', 'Portal', accounts.length], ['walk_in', 'Walk-in', walkIns], ['wholesaler', 'Wholesalers', customers.filter(c => c.role === 'wholesaler').length]].map(([value, label, count]) => <button key={value} aria-pressed={filter === value} className={filter === value ? 'is-selected' : ''} onClick={() => setFilter(String(value))}>{label}<span>{loading || error ? '—' : count}</span></button>)}</div><small aria-live="polite">{!loading && !error && `${filtered.length} ${filtered.length === 1 ? 'customer' : 'customers'} · A–Z`}</small></div>
+      {loading ? <div className="crm-empty" role="status"><div className="spinner-border spinner-border-sm" /><h4>Opening your customer book…</h4></div> : !error && <div className="crm-customer-grid">{filtered.map(customer => <article className={`crm-customer-card ${customer.kind === 'walk_in' ? 'is-walk-in' : ''}`} key={`${customer.kind}-${customer.id}`}><div className="crm-card-identity"><span className="crm-avatar" aria-hidden="true">{initials(customer.full_name)}</span><div><small>{customer.kind === 'account' ? 'PORTAL ACCOUNT' : 'WALK-IN CONTACT'}</small><h4>{customer.full_name}</h4>{customer.role === 'wholesaler' && <><span className="badge text-bg-warning">Wholesale buyer</span><small className="d-block mt-2">{customer.business_name}</small></>}</div><span className={`crm-status-dot ${customer.kind === 'account' && customer.status !== 'active' ? 'is-inactive' : ''}`} title={customer.kind === 'account' ? customer.status : 'Saved contact'} aria-label={customer.kind === 'account' ? customer.status : 'Saved contact'} /></div><div className="crm-contact-lines"><div><FaEnvelope /><span>{customer.email || <em>No email added</em>}</span></div><div><FaPhoneAlt /><span>{customer.phone || <em>No phone added</em>}</span></div><div><FaMapMarkerAlt /><span>{customer.address || <em>No address added</em>}</span></div></div><footer><span className="crm-type-badge">{customer.kind === 'account' ? <FaGlobe /> : <FaStore />}{customer.kind === 'account' ? customer.status === 'active' ? 'Portal access active' : 'Portal access inactive' : 'Counter customer'}</span>{!readOnly && <div><button className="crm-edit-button" aria-label={`Edit ${customer.full_name}`} onClick={() => edit(customer)}><FaPen /> Edit</button><button className="crm-delete-button" aria-label={`Delete ${customer.full_name}`} onClick={() => { setRemoving(customer); setModalError(''); }}><FaTrash /></button></div>}</footer></article>)}
+        {!filtered.length && <div className="crm-empty"><span className="crm-empty-icon"><FaUsers /></span><h4>{customers.length ? 'No connections found here.' : 'Your customer book starts here.'}</h4><p>{customers.length ? 'Try another search or clear your filters.' : 'Add your first customer and make the next order easier.'}</p>{(!readOnly || customers.length > 0) && <button className="crm-button crm-button-primary" onClick={() => customers.length ? (setSearch(''), setFilter('all'), setStatus('all')) : edit(null)}>{customers.length ? 'Clear filters' : 'Add your first customer'} <FaArrowRight /></button>}</div>}
       </div>}
     </div>
     {open && <CustomerFormModal show editing={!!editing} busy={busy} error={modalError} kind={kind} form={form} onKind={setKind} onChange={setForm} onClose={() => setOpen(false)} onSave={save} />}

@@ -11,7 +11,7 @@ export async function adminRequest<T>(path: string, options?: RequestInit): Prom
 
 export interface AdminCustomer {
   id: number; kind: 'account' | 'walk_in'; full_name: string; email: string;
-  phone: string; address: string; status: string;
+  phone: string; address: string; status: string; role?: string; business_name?: string;
 }
 export interface InventoryData {
   items: { item_id: number; name: string; unit: string; quantity: number; threshold: number; low: boolean }[];

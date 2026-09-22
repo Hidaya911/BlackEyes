@@ -7,6 +7,8 @@ import "../../style/OrderManager.css";
 import { DocumentPreview } from './documents/DocumentPreview';
 import { OrderDesignSummary } from '../shared/OrderDesignSummary';
 import { ProductionBoard } from './production/ProductionBoard';
+import { OrderFilters } from './OrderFilters';
+import { emptyOrderFilters, filterOrders, orderDate } from '../../utils/orderFilters';
 
 async function request<T>(path = "", options?: RequestInit): Promise<T> {
   const response = await fetch(`/api/press/orders${path}`, options);
@@ -276,6 +278,7 @@ export function OrderManager({ onCreate }: { onCreate?: () => void }) {
   const [error, setError] = useState("");
   const [reload, setReload] = useState(0);
   const [query, setQuery] = useState("");
+  const [filters, setFilters] = useState(emptyOrderFilters);
   const [view, setView] = useState<'board' | 'review'>('board');
   const [moving, setMoving] = useState(false);
   const moveLock = useRef(false);
@@ -310,11 +313,7 @@ export function OrderManager({ onCreate }: { onCreate?: () => void }) {
     return () => controller.abort();
   }, [reload]);
 
-  const visible = orders.filter((order) =>
-    `${order.order_id} ${order.customer_name} ${order.customer_email}`
-      .toLowerCase()
-      .includes(query.toLowerCase()),
-  );
+  const visible = filterOrders(orders, query, filters);
   return (
     <section className="press-orders">
       <header>
@@ -347,11 +346,12 @@ export function OrderManager({ onCreate }: { onCreate?: () => void }) {
       <input
         className="form-control mb-4"
         type="search"
-        placeholder="Search customer or order number…"
+        placeholder="Search customer, email, phone, or order number…"
         aria-label="Search orders"
         value={query}
         onChange={(event) => setQuery(event.target.value)}
       />
+      <OrderFilters value={filters} onChange={setFilters} onReset={() => { setFilters(emptyOrderFilters); setQuery(''); }} count={visible.length} total={orders.length} loading={loading} />
       {error && (
         <div className="alert alert-danger" role="alert">
           {error}
@@ -371,6 +371,7 @@ export function OrderManager({ onCreate }: { onCreate?: () => void }) {
                 <b>{customerMoney(order.total)}</b>
               </div>
               <h3>{order.customer_name}</h3>
+              <time className="order-review-date" dateTime={order.created_at}>{orderDate(order.created_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</time>
               <p>
                 {order.items
                   .map((item) => `${item.quantity} × ${item.name}`)
@@ -395,7 +396,7 @@ export function OrderManager({ onCreate }: { onCreate?: () => void }) {
         </div>
       )}
       {!loading && !error && !visible.length && (
-        <p className="text-secondary">No matching orders yet.</p>
+        <p className="text-secondary">No orders match. Try changing the search or clearing the filters.</p>
       )}
       {document && <DocumentPreview key={`${document.id}-${document.kind}`} orderId={document.id} kind={document.kind} onClose={() => setDocument(null)} />}
       {selected && (
