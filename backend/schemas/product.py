@@ -2,4 +2,7 @@
 
 
 def column_updates(dialect_name):
-    return {"products": {"wholesale_price": "INTEGER CHECK (wholesale_price >= 0)"}}
+    return {"products": {
+        "wholesale_price": "INTEGER CHECK (wholesale_price >= 0)",
+        "is_customizable": "BOOLEAN NOT NULL DEFAULT TRUE",
+    }}

@@ -17,7 +17,16 @@ from models import OrderItem, Product
 router = APIRouter()
 
 
+@router.get('/api/products')
+def public_products(db: Session = Depends(get_db)):
+    return [dict(product_id=p.product_id, name=p.name, description=p.description,
+                 image_url=p.image_url, price=p.price, standard_price=p.price,
+                 special_price=False, is_customizable=p.is_customizable, price_kind='retail')
+            for p in db.query(Product).filter(Product.status == 'active').order_by(Product.created_at.desc()).all()]
+
+
 class ProductRequest(BaseModel):
+    is_customizable: bool = True
     admin_id: int
     name: str = Field(min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=2000)
@@ -28,6 +37,7 @@ class ProductRequest(BaseModel):
 
 
 class ProductResponse(BaseModel):
+    is_customizable: bool
     wholesale_price: int | None
     product_id: int
     name: str
@@ -66,6 +76,7 @@ def create_product(payload: ProductRequest, db: Session=Depends(get_db)):
     require_admin(payload.admin_id, db)
     product = Product(name=payload.name.strip(), description=payload.description, price=payload.price, wholesale_price=payload.wholesale_price, image_url=store_product_image(payload.image_url), status=payload.status)
     db.add(product)
+    product.is_customizable = payload.is_customizable
     db.commit()
     db.refresh(product)
     return product
@@ -83,6 +94,7 @@ def edit_product(product_id: int, payload: ProductRequest, db: Session=Depends(g
     product.wholesale_price = payload.wholesale_price
     product.image_url = store_product_image(payload.image_url)
     product.status = payload.status
+    product.is_customizable = payload.is_customizable
     db.commit()
     db.refresh(product)
     return product

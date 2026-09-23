@@ -47,6 +47,6 @@ def current_user(request: Request, db: Session = Depends(get_db)) -> User:
 
 
 def require_customer(user: User = Depends(current_user)) -> User:
-    if user.role != "customer":
+    if user.role not in ("customer", "wholesaler"):
         raise HTTPException(status_code=403, detail="A customer account is required.")
     return user

@@ -1,157 +1,43 @@
-import React, { useState } from 'react';
-import { Navbar as BootstrapNavbar, Nav, Container, Form, Button } from 'react-bootstrap';
-import { FaShoppingBag, FaUser } from 'react-icons/fa';
+import { useState } from 'react';
+import { Navbar as BootstrapNavbar, Nav, Container, Form, Button, Dropdown } from 'react-bootstrap';
+import { FaShoppingBag, FaUser, FaBoxOpen, FaSignOutAlt, FaCog } from 'react-icons/fa';
+import type { AuthUser } from '../../api/auth';
 import logo from '../../assets/logo.png';
-
-interface NavbarProps {
-  onNavigateToLogin: () => void;
-  onNavigateToSignup: () => void;
+interface Props {
+  onNavigateToLogin: () => void; onNavigateToSignup: () => void;
+  user?: AuthUser | null; cartCount?: number; onCart?: () => void;
+  onOrders?: () => void; onProfile?: () => void; onLogout?: () => void;
+  onHome?: (anchor: string) => void; onSearch?: (query: string) => void;
 }
-
-export const Navbar: React.FC<NavbarProps> = ({ onNavigateToLogin, onNavigateToSignup }) => {
+export function Navbar({ onNavigateToLogin, onNavigateToSignup, user, cartCount = 0, onCart, onOrders, onProfile, onLogout, onHome, onSearch }: Props) {
   const [expanded, setExpanded] = useState(false);
-  const [showUserDropdown, setShowUserDropdown] = useState(false);
-
-  return (
-    <BootstrapNavbar
-      expanded={expanded}
-      expand="lg"
-      bg="white"
-      variant="light"
-      className="py-3 px-4 border-bottom border-light shadow-sm position-relative"
-    >
-      <Container fluid className="px-lg-5" style={{ maxWidth: '1600px' }}>
-        <BootstrapNavbar.Brand href="#home" className="d-flex align-items-center gap-3">
-          <img
-            src={logo}
-            alt="Blackeyes Logo"
-            style={{ height: '40px', objectFit: 'contain' }}
-          />
-          <div
-            className="text-muted border-start ps-3 d-none d-sm-block"
-            style={{
-              fontSize: '0.75rem',
-              lineHeight: '1.2',
-              letterSpacing: '1px',
-              fontFamily: 'monospace'
-            }}
-          >
-            PRESS & PRINT CO<br />
-            BLACKEYES
-          </div>
-        </BootstrapNavbar.Brand>
-
-        {/* Mobile Action Icons (User with dropdown & Shopping Bag) + Hamburger Toggle */}
-        <div className="d-flex align-items-center gap-3 d-lg-none position-relative">
-          {/* User Icon with Dropdown for Mobile */}
-          <div className="position-relative">
-            <div
-              className="text-dark cursor-pointer p-1"
-              onClick={() => setShowUserDropdown(!showUserDropdown)}
-            >
-              <FaUser size={18} className="text-secondary" />
-            </div>
-
-            {showUserDropdown && (
-              <div
-                className="position-absolute shadow-sm bg-white rounded-3 p-3 border"
-                style={{ right: 0, top: '40px', width: '200px', zIndex: 1050 }}
-              >
-                <div className="d-flex flex-column gap-2">
-                  <Button
-                    variant="outline-dark"
-                    className="rounded-pill py-1.5 text-sm fw-medium w-100"
-                    onClick={() => {
-                      setShowUserDropdown(false);
-                      onNavigateToLogin();
-                    }}
-                  >
-                    Login
-                  </Button>
-                  <Button
-                    className="rounded-pill py-1.5 text-sm fw-medium border-0 text-white w-100"
-                    style={{ backgroundColor: '#070a13' }}
-                    onClick={() => {
-                      setShowUserDropdown(false);
-                      onNavigateToSignup();
-                    }}
-                  >
-                    Sign Up
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Shopping Bag Icon for Mobile */}
-          <div className="position-relative text-dark cursor-pointer p-1">
-            <FaShoppingBag size={18} className="text-secondary" />
-            <span
-              className="position-absolute top-0 start-100 translate-middle badge rounded-pill"
-              style={{ backgroundColor: '#ff007f', fontSize: '0.55rem' }}
-            >
-              0
-            </span>
-          </div>
-
-          <BootstrapNavbar.Toggle
-            aria-controls="responsive-navbar-nav"
-            onClick={() => setExpanded(expanded ? false : true)}
-          />
-        </div>
-
-        <BootstrapNavbar.Collapse id="responsive-navbar-nav">
-          <Nav className="mx-auto align-items-lg-center gap-3 py-3 py-lg-0">
-            <Nav.Link href="#home" className="text-dark fw-semibold active position-relative pb-1" onClick={() => setExpanded(false)}>
-              Home
-              <span className="position-absolute bottom-0 start-0 w-100 d-none d-lg-block" style={{ height: '2px', background: 'linear-gradient(90deg, #00d2ff, #ff007f)' }}></span>
-            </Nav.Link>
-            <Nav.Link href="#services" className="text-muted" onClick={() => setExpanded(false)}>Products</Nav.Link>
-            <Nav.Link href="#wholesale" className="text-muted" onClick={() => setExpanded(false)}>Wholesale</Nav.Link>
-            <Nav.Link href="#about" className="text-muted" onClick={() => setExpanded(false)}>About</Nav.Link>
-            <Nav.Link href="#contact" className="text-muted" onClick={() => setExpanded(false)}>Contact</Nav.Link>
-          </Nav>
-
-          {/* Desktop Actions */}
-          <div className="d-flex align-items-center gap-3 mt-3 mt-lg-0">
-            <Form className="position-relative d-none d-xl-block">
-              <Form.Control
-                type="search"
-                placeholder="Search products, services..."
-                className="bg-light border text-dark rounded-pill px-4 py-2"
-                style={{ width: '250px', fontSize: '0.85rem' }}
-              />
-            </Form>
-
-            <div className="position-relative text-dark cursor-pointer px-2 d-none d-lg-block">
-              <FaShoppingBag size={20} className="text-secondary" />
-              <span
-                className="position-absolute top-0 start-100 translate-middle badge rounded-pill"
-                style={{ backgroundColor: '#ff007f', fontSize: '0.6rem' }}
-              >
-                0
-              </span>
-            </div>
-
-            <div className="d-none d-lg-flex align-items-center gap-3">
-              <Button
-                variant="outline-dark"
-                className="rounded-pill px-4 py-1.5 text-sm fw-medium"
-                onClick={onNavigateToLogin}
-              >
-                Login
-              </Button>
-              <Button
-                className="rounded-pill px-4 py-1.5 text-sm fw-medium border-0 text-white"
-                style={{ backgroundColor: '#070a13' }}
-                onClick={onNavigateToSignup}
-              >
-                Sign Up
-              </Button>
-            </div>
-          </div>
-        </BootstrapNavbar.Collapse>
-      </Container>
-    </BootstrapNavbar>
-  );
-};
+  const [search, setSearch] = useState('');
+  const navigate = (anchor: string) => { setExpanded(false); onHome?.(anchor); };
+  return <BootstrapNavbar expanded={expanded} expand="lg" className="storefront-nav bg-white py-3 border-bottom">
+    <Container fluid className="px-3 px-lg-5" style={{ maxWidth: 1600 }}>
+      <BootstrapNavbar.Brand href="#home" onClick={() => navigate('home')} className="d-flex align-items-center gap-3">
+        <img src={logo} alt="Blackeyes" style={{ height: 40 }} />
+        <span className="storefront-brand-caption d-none d-xl-block">PRESS & PRINT CO<br />BLACKEYES</span>
+      </BootstrapNavbar.Brand>
+      <div className="storefront-nav-actions order-lg-3">
+        <button type="button" className="storefront-basket" aria-label={`Open basket, ${cartCount} items`} onClick={onCart ?? onNavigateToLogin}><FaShoppingBag /><span>{cartCount}</span></button>
+        {user ? <Dropdown align="end">
+          <Dropdown.Toggle variant="light" id="storefront-profile" className="storefront-profile-toggle" aria-label="Open profile menu">
+            {user.profile_image ? <img src={user.profile_image} alt="" /> : <FaUser />}<span className="d-none d-xl-inline">{user.full_name.split(' ')[0]}</span>
+          </Dropdown.Toggle>
+          <Dropdown.Menu className="storefront-profile-menu">
+            <div className="px-3 py-2"><strong className="d-block">{user.full_name}</strong><span className={`storefront-role ${user.role === 'wholesaler' ? 'is-wholesale' : ''}`}>{user.role === 'wholesaler' ? 'Wholesaler' : 'Customer'}</span></div>
+            <Dropdown.Divider /><Dropdown.Item onClick={onOrders}><FaBoxOpen /> My orders</Dropdown.Item>
+            <Dropdown.Item onClick={onProfile}><FaCog /> Profile settings</Dropdown.Item>
+            <Dropdown.Divider /><Dropdown.Item onClick={onLogout}><FaSignOutAlt /> Log out</Dropdown.Item>
+          </Dropdown.Menu>
+        </Dropdown> : <div className="d-flex gap-2"><Button variant="outline-dark" className="rounded-pill px-3" onClick={onNavigateToLogin}>Login</Button><Button variant="dark" className="rounded-pill px-3" onClick={onNavigateToSignup}>Sign Up</Button></div>}
+        <BootstrapNavbar.Toggle aria-controls="storefront-navigation" onClick={() => setExpanded(!expanded)} />
+      </div>
+      <BootstrapNavbar.Collapse id="storefront-navigation" className="order-lg-2">
+        <Nav className="mx-auto gap-lg-3 py-3 py-lg-0">{[['home', 'Home'], ['services', 'Products'], ['wholesale', 'Wholesale'], ['about', 'About'], ['contact', 'Contact']].filter(([anchor]) => !user || anchor !== 'wholesale').map(([anchor, label]) => <Nav.Link href={`#${anchor === 'services' ? 'products' : anchor}`} key={anchor} onClick={event => { event.preventDefault(); navigate(anchor); }}>{label}</Nav.Link>)}</Nav>
+        <Form className="me-lg-3" onSubmit={event => { event.preventDefault(); onSearch?.(search); navigate('services'); }}><Form.Control type="search" aria-label="Search products" placeholder="Search products…" className="rounded-pill bg-light" value={search} onChange={event => setSearch(event.target.value)} /></Form>
+      </BootstrapNavbar.Collapse>
+    </Container>
+  </BootstrapNavbar>;
+}

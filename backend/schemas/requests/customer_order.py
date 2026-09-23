@@ -55,8 +55,6 @@ class OrderRequest(CustomerInput):
         ids = [item.product_id for item in self.items]
         if len(ids) != len(set(ids)):
             raise ValueError("Combine quantities for the same product into one cart item.")
-        if any(not item.designs for item in self.items) and not self.files and not self.design_request_note:
-            raise ValueError("Provide artwork or a design brief for every item.")
         count = len(self.files) + sum(d.file is not None for item in self.items for d in item.designs)
         if count > 30:
             raise ValueError("Attach at most 30 design files per order (20 MB combined).")

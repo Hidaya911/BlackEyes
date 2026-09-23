@@ -62,8 +62,6 @@ class LocalOrderRequest(PressInput):
     def validate_order(self):
         if sum(value is not None for value in (self.customer_id, self.walk_in_customer_id, self.customer)) != 1:
             raise ValueError("Choose one existing customer or enter a new customer's details.")
-        if not self.files and not self.design_request_note:
-            raise ValueError("Attach artwork or describe the job to be produced.")
         if self.amount_paid > self.expected_total:
             raise ValueError("Payment cannot exceed the order total.")
         if self.payment_method == "cash" and self.payment_reference:

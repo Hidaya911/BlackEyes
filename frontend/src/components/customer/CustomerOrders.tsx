@@ -49,6 +49,9 @@ export function CustomerOrders({
   onBrowse,
 }: Props) {
   const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState('All orders');
+  const ready = orders.filter(order => order.production_stage === 'Ready for Pickup').length;
+  const completed = orders.filter(order => order.production_stage === 'Completed').length;
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
@@ -56,15 +59,19 @@ export function CustomerOrders({
   const filtered = orders.filter((order) =>
     `${order.order_id} ${order.items.map((item) => item.name).join(" ")}`
       .toLowerCase()
-      .includes(search.toLowerCase()),
+      .includes(search.toLowerCase()) && (filter === 'All orders' || (filter === 'Ready for pickup' ? order.production_stage === 'Ready for Pickup' : filter === 'Completed' ? order.production_stage === 'Completed' : !['Ready for Pickup', 'Completed', 'Cancelled'].includes(order.production_stage))),
   );
 
   return (
     <section className="customer-orders">
+      <header className="order-studio-hero">
+        <div><span className="customer-kicker">YOUR PERSONAL PRINT COLLECTION</span><h1>From first idea.<br /><em>To finished print.</em></h1><p>Follow your projects as they come to life. Every detail, all in one place.</p><button className="customer-button" onClick={onBrowse}>Start something new <FaArrowRight /></button></div>
+        <div className="order-studio-ticket"><span>BLACKEYES / ORDER BOOK</span><strong>{String(orders.length).padStart(2, '0')}</strong><p>projects with your name on them</p><div><b>{ready}</b> ready to collect <span>✦</span> <b>{completed}</b> completed</div><small>IDEAS IN. IMPRESSIONS OUT.</small></div>
+      </header>
       <div className="customer-section-heading">
         <div>
           <span className="customer-kicker">FROM IDEA TO PICKUP</span>
-          <h2>Your print journey.</h2>
+          <h2>Your order book.</h2>
           <p>Every project, every detail, in one place.</p>
         </div>
         <button
@@ -105,6 +112,7 @@ export function CustomerOrders({
           onChange={(event) => setSearch(event.target.value)}
         />
       </label>
+      <div className="order-studio-filters" aria-label="Filter orders">{['All orders', 'In progress', 'Ready for pickup', 'Completed'].map(label => <button key={label} type="button" aria-pressed={filter === label} className={filter === label ? 'is-active' : ''} onClick={() => setFilter(label)}>{label}</button>)}</div>
       <div className="customer-order-grid">
         {filtered.map((order) => (
           <article className="customer-order-card" key={order.order_id}>
@@ -143,6 +151,7 @@ export function CustomerOrders({
                 View order <FaArrowRight />
               </button>
             </div>
+            <div className="order-card-progress" aria-label={`Order status: ${order.production_stage}`}><div>{stages.map((stage, index) => <span key={stage} className={order.production_stage === 'Completed' || index <= stages.indexOf(order.production_stage) ? 'is-done' : ''} />)}</div><small>{order.production_stage === 'Ready for Pickup' ? 'Your prints are ready. See you at the press!' : order.production_stage === 'Completed' ? 'Collected. Made to leave an impression.' : order.production_stage === 'Cancelled' ? 'This order was cancelled.' : 'We’re bringing your project to life.'}</small></div>
           </article>
         ))}
       </div>
@@ -190,7 +199,7 @@ export function CustomerOrders({
                   <li
                     key={stage}
                     className={
-                      index <= stages.indexOf(selected.production_stage)
+                      selected.production_stage === 'Completed' || index <= stages.indexOf(selected.production_stage)
                         ? "is-complete"
                         : ""
                     }
@@ -230,7 +239,7 @@ export function CustomerOrders({
                   <OrderDesignSummary order={selected} audience="customer" />
                   <p className="customer-preserve-text">
                     {selected.design_request_note ||
-                      (selected.items.some(item => item.designs?.length) ? '' : "Use the supplied artwork.")}
+                      (selected.items.some(item => item.designs?.length) ? '' : selected.files.length ? "Use the supplied artwork." : "No design files required for this order.")}
                   </p>
                   {selected.files.filter(file => !file.design_id).map((file) => (
                     <a

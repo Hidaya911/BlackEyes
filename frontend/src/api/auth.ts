@@ -47,9 +47,9 @@ export const updateAdminSettings = async (admin_id: number, data: Record<string,
   return response.json() as Promise<AuthUser>;
 };
 
-export interface Product { product_id: number; name: string; description: string | null; price: number; wholesale_price: number | null; image_url: string | null; status: string; }
+export interface Product { product_id: number; name: string; description: string | null; price: number; wholesale_price: number | null; image_url: string | null; status: string; is_customizable: boolean; }
 export const getProducts = (adminId: number) => fetch(`/api/admin/products?admin_id=${adminId}`).then(async response => { if (!response.ok) throw new Error('Unable to load products.'); return response.json() as Promise<Product[]>; });
-export const saveProduct = async (adminId: number, data: Record<string, string>, productId?: number) => {
+export const saveProduct = async (adminId: number, data: Record<string, string | boolean>, productId?: number) => {
   const response = await fetch(productId ? `/api/admin/products/${productId}` : '/api/admin/products', {
     method: productId ? 'PUT' : 'POST',
     headers: { 'Content-Type': 'application/json' },

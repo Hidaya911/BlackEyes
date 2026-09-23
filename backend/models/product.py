@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy import Boolean, Column, Integer, String, DateTime, true
 from sqlalchemy.sql import func
 from database import Base
 
@@ -12,4 +12,5 @@ class Product(Base):
     wholesale_price = Column(Integer, nullable=True)  # cents; unset on legacy products
     image_url = Column(String, nullable=True)
     status = Column(String, default="active", nullable=False)
+    is_customizable = Column(Boolean, default=True, server_default=true(), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

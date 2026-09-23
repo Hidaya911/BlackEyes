@@ -30,6 +30,7 @@ function ProductVisual({
         <img
           src={product.image_url}
           alt={product.name}
+          loading="lazy"
           onError={() => setFailed(true)}
         />
       ) : (
@@ -42,6 +43,7 @@ function ProductVisual({
           <small>YOUR NEXT GREAT IMPRESSION.</small>
         </div>
       )}
+      <span className="product-type-tag">{product.is_customizable ? 'Make it yours' : 'Ready to order'}</span>
       {product.special_price && (
         <span className="customer-special-tag">Your exclusive price</span>
       )}
@@ -50,6 +52,10 @@ function ProductVisual({
 }
 
 interface Props {
+  embedded?: boolean;
+  showToolbar?: boolean;
+  onLogin?: () => void;
+  search?: string;
   products: CustomerProduct[];
   orders: CustomerOrder[];
   firstName: string;
@@ -62,9 +68,9 @@ export function ProductCatalog({
   orders,
   firstName,
   onAdd,
-  onOrders,
+  onOrders, embedded = false, onLogin, search = '', showToolbar = true,
 }: Props) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(search);
   const [sort, setSort] = useState("featured");
   const [selected, setSelected] = useState<CustomerProduct | null>(null);
   const [quantity, setQuantity] = useState(1);
@@ -78,7 +84,7 @@ export function ProductCatalog({
         .toLowerCase()
         .includes(query.toLowerCase()),
     );
-    if (sort === "price") result.sort((a, b) => a.price - b.price);
+    if (sort === "price") result.sort((a, b) => (a.price ?? Infinity) - (b.price ?? Infinity));
     if (sort === "name") result.sort((a, b) => a.name.localeCompare(b.name));
     return result;
   }, [products, query, sort]);
@@ -86,9 +92,9 @@ export function ProductCatalog({
   function add(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selected) return;
-    const failure = designError(quantity, designs);
+    const failure = selected.is_customizable ? designError(quantity, designs) : '';
     if (failure) { setDesignFailure(failure); return; }
-    const basketFailure = onAdd(selected.product_id, quantity, specifications, designs);
+    const basketFailure = onAdd(selected.product_id, quantity, selected.is_customizable ? specifications : '', selected.is_customizable ? designs : []);
     if (basketFailure) { setDesignFailure(basketFailure); return; }
     setMessage(`${selected.name} added to your basket.`);
     setSelected(null);
@@ -96,7 +102,7 @@ export function ProductCatalog({
 
   return (
     <>
-      <section className="customer-hero">
+      {!embedded && <><section className="customer-hero">
         <div className="customer-hero-copy">
           <span className="customer-kicker">
             HELLO, {firstName.toUpperCase()} · LET’S MAKE SOMETHING
@@ -163,8 +169,9 @@ export function ProductCatalog({
           {orders.length} orders in your studio <FaArrowRight />
         </button>
       </div>
+      </>}
       <section id="customer-collection" className="customer-collection">
-        <div className="customer-section-heading">
+        {!embedded && <div className="customer-section-heading">
           <div>
             <span className="customer-kicker">THE COLLECTION</span>
             <h2>Made to leave an impression.</h2>
@@ -172,8 +179,9 @@ export function ProductCatalog({
           <span className="customer-count-pill">
             {products.length} products
           </span>
-        </div>
-        <div className="customer-catalog-toolbar">
+        </div>}
+        {showToolbar && <div className="customer-catalog-toolbar">
+          {embedded && <span className="collection-count"><b>{String(filtered.length).padStart(2, '0')}</b> products to explore</span>}
           <label className="customer-search">
             <FaSearch />
             <input
@@ -195,6 +203,7 @@ export function ProductCatalog({
             <option value="name">Name: A to Z</option>
           </select>
         </div>
+        }
         {message && (
           <div className="customer-notice" role="status">
             <FaCheck />
@@ -213,17 +222,19 @@ export function ProductCatalog({
                 <h3>{product.name}</h3>
                 <p>
                   {product.description ||
-                    "Carefully produced, with your design at the centre."}
+                    (product.is_customizable ? "Your ideas, brought to life in print." : "Thoughtfully made. Ready for your next project.")}
                 </p>
                 <div className="customer-product-bottom">
                   <div>
-                    <strong>{customerMoney(product.price)}</strong>
-                    <small>per unit</small>
+                    <strong>{product.price == null ? 'Contact for price' : customerMoney(product.price)}</strong>
+                    <small>{product.price_kind === 'wholesale' ? 'wholesale / unit' : 'per unit'}</small>
                   </div>
                   <button
                     className="customer-add-button"
-                    aria-label={`Customize ${product.name}`}
+                    aria-label={`${product.is_customizable ? 'Customize' : 'Add'} ${product.name}`}
+                    disabled={product.price == null}
                     onClick={() => {
+                      if (onLogin) { onLogin(); return; }
                       setSelected(product);
                       setQuantity(1);
                       setSpecifications("");
@@ -231,7 +242,7 @@ export function ProductCatalog({
                       setDesignFailure('');
                     }}
                   >
-                    <FaPlus /> Customize
+                    <FaPlus /> {product.is_customizable ? 'Customize' : 'Add to basket'}
                   </button>
                 </div>
               </div>
@@ -280,7 +291,7 @@ export function ProductCatalog({
                 onChange={(event) => { const next = Number(event.target.value); setQuantity(next); setDesigns(current => resizeDesigns(current, next)); }}
               />
             </label>
-            <label className="customer-field mt-3">
+            {selected?.is_customizable && <><label className="customer-field mt-3">
               <span>Print details / specifications</span>
               <textarea
                 className="form-control"
@@ -292,6 +303,7 @@ export function ProductCatalog({
               />
             </label>
             <ItemDesignEditor quantity={quantity} designs={designs} onChange={setDesigns} />
+            </>}
             {designFailure && <div className="alert alert-danger mt-3" role="alert">{designFailure}</div>}
             <p className="customer-form-hint mt-2">
               Catalog pricing applies. The press will review your specifications

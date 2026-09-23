@@ -83,6 +83,7 @@ def catalog(db: Session, customer_id: int | None):
         "price_kind": counter_price(product, customer, prices)[1],
         "special_price": counter_price(product, customer, prices)[1] == "special",
         "description": product.description, "image_url": product.image_url,
+        "is_customizable": product.is_customizable,
     } for product in db.query(Product).filter(
         Product.status == "active"
     ).order_by(Product.name).all()]
@@ -130,10 +131,17 @@ def create_local_order(payload: LocalOrderRequest, operator: User, db: Session):
         product = products.get(item.product_id)
         if item.product_id and not product:
             raise HTTPException(status_code=409, detail="A product is no longer available. Refresh the catalog.")
+        if product and not product.is_customizable and item.specifications:
+            raise HTTPException(422, f"{product.name} does not support customization. Refresh the catalog.")
         price = item.unit_price if item.unit_price is not None else counter_price(product, customer, prices)[0]
         if price is None:
             raise HTTPException(422, f"Wholesale price is not set for {product.name}. Enter an agreed unit price or ask an admin to set its wholesale price.")
         lines.append((item, product.name if product else item.name, price, price * item.quantity))
+    customizable = any(not item.product_id or products[item.product_id].is_customizable for item in payload.items)
+    if customizable and not payload.files and not payload.design_request_note:
+        raise HTTPException(422, "Provide artwork or a job brief for the customizable items.")
+    if not customizable and (payload.files or payload.design_request_note):
+        raise HTTPException(422, "These products do not support customization.")
     total = sum(line[3] for line in lines)
     if total > 99_999_999_999_999:
         raise HTTPException(status_code=422, detail="Order total exceeds the supported limit.")

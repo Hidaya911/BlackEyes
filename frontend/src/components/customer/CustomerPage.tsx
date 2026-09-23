@@ -9,18 +9,25 @@ import {
   type CustomerProduct,
   type DesignDraft,
 } from "../../api/customer";
-import {
-  CustomerLayout,
-  type CustomerSection,
-} from "./CustomerLayout";
-import { ProductCatalog } from "./ProductCatalog";
-import { CustomerCheckout } from "./CustomerCheckout";
+import { Navbar } from '../home/Navbar';
+import { Hero } from '../home/Hero';
+import { FeaturesBar } from '../home/FeaturesBar';
+import { Services } from '../home/Services';
+import { WholesaleRegistration } from '../home/WholesaleRegistration';
+import { AboutSection } from '../home/AboutSection';
+import { Footer } from '../home/Footer';
+import '../../style/Storefront.css';
+type CustomerSection = 'Explore' | 'Products' | 'My orders' | 'Profile settings';
 import { CustomerOrders } from "./CustomerOrders";
+import { CustomerCheckout } from './CustomerCheckout';
 import { CustomerProfile } from "./CustomerProfile";
 import "../../style/CustomerPortal.css";
 import { attachmentError } from '../../utils/customerDesigns';
 
 interface Props {
+  user: AuthUser | null;
+  onLogin: () => void;
+  onSignup: () => void;
   onLogout: () => void;
   onProfileSaved: (user: AuthUser) => void;
 }
@@ -48,12 +55,14 @@ function loadBasket(userId: number): CartLine[] {
   }
 }
 
-export function CustomerPage({ onLogout, onProfileSaved }: Props) {
-  const [profile, setProfile] = useState<AuthUser | null>(null);
+export function CustomerPage({ user, onLogin, onSignup, onLogout, onProfileSaved }: Props) {
+  const userId = user?.user_id;
+  const [profile, setProfile] = useState<AuthUser | null>(user);
   const [products, setProducts] = useState<CustomerProduct[]>([]);
   const [orders, setOrders] = useState<CustomerOrder[]>([]);
   const [cart, setCart] = useState<CartLine[]>([]);
-  const [section, setSection] = useState<CustomerSection>("Explore");
+  const [section, setSection] = useState<CustomerSection>(() => window.location.hash === '#products' ? 'Products' : 'Explore');
+  const [search, setSearch] = useState('');
   const [checkout, setCheckout] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -61,20 +70,29 @@ export function CustomerPage({ onLogout, onProfileSaved }: Props) {
   const [reload, setReload] = useState(0);
 
   useEffect(() => {
+    const navigateHash = () => {
+      setSection(window.location.hash === '#products' ? 'Products' : 'Explore');
+      if (window.location.hash === '#products') window.scrollTo({ top: 0 });
+    };
+    window.addEventListener('hashchange', navigateHash);
+    return () => window.removeEventListener('hashchange', navigateHash);
+  }, []);
+
+  useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
     setError("");
     Promise.all([
-      getCustomerProfile(controller.signal),
-      getCustomerProducts(controller.signal),
-      getCustomerOrders(controller.signal),
+      userId ? getCustomerProfile(controller.signal) : Promise.resolve(null),
+      userId ? getCustomerProducts(controller.signal) : fetch('/api/products', { signal: controller.signal }).then(response => { if (!response.ok) throw new Error('Unable to load products.'); return response.json() as Promise<CustomerProduct[]>; }),
+      userId ? getCustomerOrders(controller.signal) : Promise.resolve([]),
     ])
       .then(([user, catalog, history]) => {
         if (controller.signal.aborted) return;
         setProfile(user);
         setProducts(catalog);
         setOrders(history);
-        setCart(loadBasket(user.user_id));
+        setCart(user ? loadBasket(user.user_id) : []);
       })
       .catch((failure: Error) => {
         if (!controller.signal.aborted) setError(failure.message);
@@ -83,7 +101,7 @@ export function CustomerPage({ onLogout, onProfileSaved }: Props) {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [reload]);
+  }, [reload, userId]);
 
   function updateCart(next: CartLine[]) {
     setCart(next);
@@ -111,7 +129,7 @@ export function CustomerPage({ onLogout, onProfileSaved }: Props) {
                   ...line,
                   quantity: line.quantity + quantity,
                   specifications: specifications || line.specifications,
-                  designs: [...(line.designs?.length ? line.designs : [{ quantity: line.quantity, brief: '' }]), ...designs],
+                  designs: products.find(product => product.product_id === productId)?.is_customizable ? [...(line.designs?.length ? line.designs : [{ quantity: line.quantity, brief: '' }]), ...designs] : [],
                 }
               : line,
           )
@@ -125,66 +143,35 @@ export function CustomerPage({ onLogout, onProfileSaved }: Props) {
     setProducts(await getCustomerProducts());
   }
 
-  if (loading)
-    return (
-      <main className="customer-loading" role="status">
-        <div className="spinner-border" />
-        <h2>Opening your creative space…</h2>
-      </main>
-    );
-  if (error || !profile)
-    return (
-      <main className="customer-loading">
-        <h2>Let’s get you back to your studio.</h2>
-        <p role="alert">{error || "Please sign in to continue."}</p>
-        <div className="d-flex gap-2">
-          <button
-            className="customer-button"
-            onClick={() => setReload((value) => value + 1)}
-          >
-            Try again
-          </button>
-          <button className="btn btn-light" onClick={onLogout}>
-            Return to sign in
-          </button>
-        </div>
-      </main>
-    );
-
-  return (
-    <CustomerLayout
-      user={profile}
-      section={section}
-      onNavigate={(next) => {
-        setSection(next);
-        setSuccess("");
-      }}
-      onLogout={onLogout}
-      cartCount={cart.reduce((sum, line) => sum + line.quantity, 0)}
-      onCart={() => setCheckout(true)}
-    >
-      {success && (
-        <div className="customer-notice mb-4" role="status">
-          {success}
-        </div>
-      )}
-      {section === "Explore" && (
-        <ProductCatalog
-          products={products}
-          orders={orders}
-          firstName={profile.full_name.split(" ")[0]}
-          onAdd={addToCart}
-          onOrders={() => setSection("My orders")}
-        />
-      )}
+  function goHome(anchor = 'home') {
+    if (anchor === 'services') { openProducts(); return; }
+    window.location.hash = anchor;
+    setSection('Explore');
+    requestAnimationFrame(() => document.getElementById(anchor)?.scrollIntoView({ behavior: 'smooth' }));
+  }
+  function openProducts() { window.location.hash = 'products'; openSection('Products'); }
+  function openSection(next: CustomerSection) { setSection(next); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+  return (<div className="storefront">
+    <Navbar user={profile} onNavigateToLogin={onLogin} onNavigateToSignup={onSignup} onLogout={onLogout}
+      cartCount={cart.reduce((sum, line) => sum + line.quantity, 0)} onCart={() => profile ? setCheckout(true) : onLogin()}
+      onHome={goHome} onSearch={setSearch} onOrders={() => { openSection('My orders'); void getCustomerOrders().then(setOrders).catch(e => setError(e.message)); }} onProfile={() => openSection('Profile settings')} />
+    <main>
+      {error && <div className="alert alert-danger m-4" role="alert">{error} <button className="btn btn-sm btn-outline-danger" onClick={() => setReload(value => value + 1)}>Try again</button></div>}
+      {success && <div className="customer-notice m-4" role="status">{success}</div>}
+      {section === 'Explore' && <><Hero onStartProject={() => goHome('services')} /><FeaturesBar />
+        {loading ? <p className="text-center p-5" role="status">Loading the collection…</p> : <Services products={products} onAdd={addToCart} onLogin={profile ? undefined : onLogin} onViewAll={openProducts} wholesale={profile?.role === 'wholesaler'} />}
+        {!user && <WholesaleRegistration />}<AboutSection /></>}
+      <div className={section === 'Explore' ? '' : 'storefront-account'}>
+      {section !== 'Explore' && <button className="storefront-back" onClick={() => goHome()}>← Back to the shop</button>}
+      {section === 'Products' && (loading ? <p role="status">Loading the collection…</p> : <Services fullCatalog products={products} onAdd={addToCart} onLogin={profile ? undefined : onLogin} search={search} wholesale={profile?.role === 'wholesaler'} />)}
       {section === "My orders" && (
         <CustomerOrders
           orders={orders}
-          onBrowse={() => setSection("Explore")}
+          onBrowse={() => goHome('services')}
           onRefresh={async () => setOrders(await getCustomerOrders())}
         />
       )}
-      {section === "Profile settings" && (
+      {section === "Profile settings" && profile && (
         <CustomerProfile
           user={profile}
           onLogout={onLogout}
@@ -194,7 +181,8 @@ export function CustomerPage({ onLogout, onProfileSaved }: Props) {
           }}
         />
       )}
-      {checkout && (
+      </div>
+      {checkout && profile && (
         <CustomerCheckout
           cart={cart}
           products={products}
@@ -209,13 +197,14 @@ export function CustomerPage({ onLogout, onProfileSaved }: Props) {
             ]);
             updateCart([]);
             setCheckout(false);
-            setSection("My orders");
+            openSection("My orders");
             setSuccess(
               `Order #${order.order_id} is placed. The press will review your design and print details.`,
             );
           }}
         />
       )}
-    </CustomerLayout>
+    </main><Footer />
+    </div>
   );
 }

@@ -121,6 +121,8 @@ export function WalkInOrder({
     };
   }, [query, mode]);
 
+  const canCustomize = (line: Line) => line.product === 'custom' || !!products.find(product => String(product.product_id) === line.product)?.is_customizable;
+  const hasCustomization = lines.some(canCustomize);
   const unitPrice = (line: Line) =>
     line.price !== ""
       ? Math.round(Number(line.price || 0) * 100)
@@ -173,10 +175,10 @@ export function WalkInOrder({
           ? { name: line.name, unit_price: unitPrice(line) }
           : { product_id: Number(line.product), ...(line.price !== "" ? { unit_price: unitPrice(line) } : {}) }),
         quantity: line.quantity,
-        specifications: line.specifications,
+        specifications: canCustomize(line) ? line.specifications : '',
       })),
-      files,
-      design_request_note: note,
+      files: hasCustomization ? files : [],
+      design_request_note: hasCustomization ? note : '',
       expected_total: total,
       amount_paid: amountPaid,
       payment_method: method,
@@ -486,7 +488,7 @@ export function WalkInOrder({
                     )}
                   </div>
                   {line.product !== 'custom' && <label className="w-100 mt-3">Edit unit price (USD) <small>optional — blank uses catalog price</small><input className="form-control" aria-label={`Edit unit price for item ${index + 1}`} type="number" min="0" max="999999.99" step="0.01" value={line.price} onChange={event => updateLine(line.id, { price: event.target.value })} placeholder="Use customer catalog price" /></label>}
-                  <label className="w-100 mt-3">
+                  {canCustomize(line) && <label className="w-100 mt-3">
                     Specifications <small>optional</small>
                     <input
                       className="form-control"
@@ -497,7 +499,7 @@ export function WalkInOrder({
                         updateLine(line.id, { specifications: e.target.value })
                       }
                     />
-                  </label>
+                  </label>}
                 </div>
               ))}
               <button
@@ -509,7 +511,7 @@ export function WalkInOrder({
                 <FaPlus /> Add custom service
               </button>
             </section>
-            <section className="counter-panel">
+            {hasCustomization && <section className="counter-panel">
               <h3>
                 <b>03</b> Design &amp; instructions
               </h3>
@@ -594,7 +596,7 @@ export function WalkInOrder({
                   </button>
                 </div>
               ))}
-            </section>
+            </section>}
           </div>
           <aside className="counter-summary counter-panel">
             <span className="press-kicker">ORDER SUMMARY</span>

@@ -58,6 +58,7 @@ export function CustomerProfile({ user, onSaved, onLogout }: Props) {
         <div>
           <span className="customer-kicker">A LITTLE MORE YOU</span>
           <h2>Your profile, your studio.</h2>
+          <span className={`storefront-role ${user.role === 'wholesaler' ? 'is-wholesale' : ''}`}>{user.role === 'wholesaler' ? 'Wholesaler · wholesale pricing' : 'Customer'}</span>
           <p>
             Keep your details up to date so we can reach you about your prints.
           </p>

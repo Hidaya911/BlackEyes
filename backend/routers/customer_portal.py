@@ -106,9 +106,11 @@ def get_products(customer: User = Depends(require_customer), db: Session = Depen
     return [{
         "product_id": product.product_id, "name": product.name,
         "description": product.description, "image_url": product.image_url,
-        "price": prices.get(product.product_id, product.price),
-        "standard_price": product.price,
-        "special_price": product.product_id in prices,
+        "price": product.wholesale_price if customer.role == "wholesaler" else prices.get(product.product_id, product.price),
+        "standard_price": product.wholesale_price if customer.role == "wholesaler" else product.price,
+        "is_customizable": product.is_customizable,
+        "special_price": customer.role != "wholesaler" and product.product_id in prices,
+        "price_kind": "wholesale" if customer.role == "wholesaler" else "retail",
     } for product in db.query(Product).filter(Product.status == "active").order_by(Product.created_at.desc()).all()]
 
 
@@ -143,7 +145,13 @@ def place_order(payload: OrderRequest, customer: User = Depends(require_customer
         product = products.get(item.product_id)
         if not product:
             raise HTTPException(status_code=409, detail="A product is no longer available. Refresh the catalog and update your basket.")
-        price = prices.get(product.product_id, product.price)
+        if not product.is_customizable and (item.designs or item.specifications):
+            raise HTTPException(422, f"{product.name} does not support customization. Refresh your basket.")
+        if product.is_customizable and not item.designs and not payload.files and not payload.design_request_note:
+            raise HTTPException(422, f"Provide artwork or a design brief for {product.name}.")
+        price = product.wholesale_price if customer.role == "wholesaler" else prices.get(product.product_id, product.price)
+        if price is None:
+            raise HTTPException(422, f"Contact the press for a wholesale price for {product.name}.")
         subtotal = price * item.quantity
         total += subtotal
         lines.append((item, product, price, subtotal))
@@ -151,6 +159,8 @@ def place_order(payload: OrderRequest, customer: User = Depends(require_customer
         raise HTTPException(status_code=409, detail="A product price changed. Refresh the catalog and review your updated total.")
     if total > 99_999_999_999_999:
         raise HTTPException(status_code=422, detail="Order total exceeds the supported limit.")
+    if not any(product.is_customizable for product in products.values()) and (payload.files or payload.design_request_note):
+        raise HTTPException(422, "These products do not support customization.")
     decoded = [(file.name, *decode_artwork(file.data_url)) for file in payload.files]
     design_files = {(item.product_id, index): (design.file.name, *decode_artwork(design.file.data_url))
         for item in payload.items for index, design in enumerate(item.designs) if design.file}

@@ -1,12 +1,14 @@
 import type { AuthUser } from "./auth";
 
 export interface CustomerProduct {
+  is_customizable: boolean;
   product_id: number;
   name: string;
   description: string | null;
   image_url: string | null;
-  price: number;
-  standard_price: number;
+  price: number | null;
+  standard_price: number | null;
+  price_kind?: 'retail' | 'wholesale';
   special_price: boolean;
 }
 

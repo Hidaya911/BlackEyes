@@ -3,6 +3,7 @@ import { Modal } from 'react-bootstrap';
 import { deleteProduct, getProducts, saveProduct, type Product } from '../../api/auth';
 
 interface ProductForm {
+  is_customizable: boolean;
   name: string;
   price: string;
   wholesale_price: string;
@@ -12,6 +13,7 @@ interface ProductForm {
 }
 
 const emptyForm = (): ProductForm => ({
+  is_customizable: true,
   name: '',
   price: '',
   wholesale_price: '',
@@ -66,6 +68,13 @@ function ProductFields({ id, value, onChange, onReadingChange }: ProductFieldsPr
   return (
     <fieldset disabled={reading}>
       <div className="row g-3">
+        <div className="col-12">
+          <label className="form-check" htmlFor={`${id}-customizable`}>
+            <input id={`${id}-customizable`} className="form-check-input" type="checkbox" checked={value.is_customizable} onChange={event => onChange({ ...value, is_customizable: event.target.checked })} />
+            <span className="form-check-label">Customizable product</span>
+          </label>
+          <small className="text-muted">Enable artwork, design briefs, and specifications when ordering this product.</small>
+        </div>
         <div className="col-md-6">
           <label htmlFor={`${id}-name`} className="form-label small fw-bold">
             PRODUCT NAME
@@ -250,6 +259,7 @@ export const ProductManager = ({ adminId }: { adminId?: number }) => {
   const openEdit = (product: Product) => {
     setModalError('');
     setEditForm({
+      is_customizable: product.is_customizable,
       name: product.name,
       price: (product.price / 100).toFixed(2),
       wholesale_price: product.wholesale_price == null ? '' : (product.wholesale_price / 100).toFixed(2),
@@ -337,6 +347,7 @@ export const ProductManager = ({ adminId }: { adminId?: number }) => {
                 <div className="p-3 d-flex flex-column flex-grow-1">
                   <small className="text-secondary">
                     #{product.product_id} · {product.status}
+                    {' · '}{product.is_customizable ? 'Customizable' : 'Standard product'}
                   </small>
                   <h3 className="h5 mt-2 text-break">{product.name}</h3>
                   <p className="small text-muted text-break" style={{ whiteSpace: 'pre-wrap' }}>

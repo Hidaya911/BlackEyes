@@ -43,6 +43,113 @@ class AdminWorkspaceTests(unittest.TestCase):
         self.db.close()
         self.engine.dispose()
 
+    def test_product_customizable_setting_and_catalogs(self):
+        payload = dict(admin_id=self.admin.user_id, name="Ready-made notebook", price=200,
+                       wholesale_price=150, is_customizable=False)
+        result = self.client.post('/api/admin/products', json=payload)
+        self.assertEqual(result.status_code, 201, result.text)
+        product_id = result.json()['product_id']
+        self.assertFalse(result.json()['is_customizable'])
+        catalog = self.client.get('/api/press/catalog').json()
+        self.assertFalse(next(p for p in catalog if p['product_id'] == product_id)['is_customizable'])
+        self.actor = self.customer
+        catalog = self.client.get('/api/customer/products').json()
+        self.assertFalse(next(p for p in catalog if p['product_id'] == product_id)['is_customizable'])
+        self.actor = self.admin
+        result = self.client.put(f'/api/admin/products/{product_id}', json={**payload, 'is_customizable': True})
+        self.assertEqual(result.status_code, 200, result.text)
+        self.assertTrue(result.json()['is_customizable'])
+
+    def test_standard_counter_order_needs_no_design(self):
+        self.product.is_customizable = False
+        self.db.commit()
+        payload = self.order()
+        payload['design_request_note'] = ''
+        result = self.client.post('/api/press/orders', json=payload)
+        self.assertEqual(result.status_code, 201, result.text)
+        payload['request_key'] = str(uuid4())
+        payload['items'][0]['specifications'] = 'Change the color'
+        self.assertEqual(self.client.post('/api/press/orders', json=payload).status_code, 422)
+        payload['items'][0]['specifications'] = ''
+        self.product.is_customizable = True
+        self.db.commit()
+        self.assertEqual(self.client.post('/api/press/orders', json=payload).status_code, 422)
+
+    def test_customer_standard_and_mixed_orders(self):
+        self.product.is_customizable = False
+        custom = Product(name="Custom mug", price=300, is_customizable=True)
+        self.db.add(custom)
+        self.db.commit()
+        self.actor = self.customer
+        payload = dict(request_key=str(uuid4()), items=[dict(product_id=self.product.product_id, quantity=2)],
+                       expected_total=200, contact_phone="123456")
+        result = self.client.post('/api/customer/orders', json=payload)
+        self.assertEqual(result.status_code, 201, result.text)
+        self.assertEqual(result.json()['items'][0]['designs'], [])
+        payload['request_key'] = str(uuid4())
+        payload['items'].append(dict(product_id=custom.product_id, quantity=1))
+        payload['expected_total'] = 500
+        self.assertEqual(self.client.post('/api/customer/orders', json=payload).status_code, 422)
+        payload['items'][1]['designs'] = [dict(quantity=1, brief="Print a flower")]
+        result = self.client.post('/api/customer/orders', json=payload)
+        self.assertEqual(result.status_code, 201, result.text)
+        payload['request_key'] = str(uuid4())
+        payload['items'][0]['designs'] = [dict(quantity=2, brief="Change notebook cover")]
+        self.assertEqual(self.client.post('/api/customer/orders', json=payload).status_code, 422)
+
+    def test_product_customizable_migration_preserves_existing_products(self):
+        from sqlalchemy import text
+        from schemas.updates import apply_schema_updates
+        engine = create_engine('sqlite://')
+        try:
+            with engine.begin() as connection:
+                connection.execute(text('CREATE TABLE products (product_id INTEGER PRIMARY KEY, name TEXT)'))
+                connection.execute(text("INSERT INTO products VALUES (1, 'Existing product')"))
+            apply_schema_updates(engine)
+            apply_schema_updates(engine)
+            with engine.connect() as connection:
+                self.assertEqual(connection.execute(text('SELECT is_customizable FROM products')).scalar(), 1)
+        finally:
+            engine.dispose()
+
+    def test_wholesale_storefront_pricing_checkout_and_privacy(self):
+        from models import CustomerSpecialPrice
+        from decimal import Decimal
+        buyer = User(full_name='Wholesale buyer', email='buyer@test.local', password_hash='unused',
+                     role='wholesaler', status='active', phone='123456')
+        self.product.wholesale_price = 60
+        self.product.is_customizable = False
+        self.db.add(buyer)
+        self.db.flush()
+        self.db.add(CustomerSpecialPrice(customer_id=buyer.user_id, product_id=self.product.product_id, special_price=Decimal('0.10'), set_by=self.admin.user_id))
+        self.db.commit()
+        public = self.client.get('/api/products')
+        self.assertEqual(public.status_code, 200)
+        self.assertEqual(public.json()[0]['price'], 100)
+        self.assertNotIn('wholesale_price', public.text)
+        self.actor = buyer
+        catalog = self.client.get('/api/customer/products').json()
+        self.assertEqual(catalog[0]['price'], 60)
+        self.assertEqual(catalog[0]['price_kind'], 'wholesale')
+        self.assertFalse(catalog[0]['special_price'])
+        self.assertEqual(self.client.get('/api/customer/profile').json()['role'], 'wholesaler')
+        payload = dict(request_key=str(uuid4()), items=[dict(product_id=self.product.product_id, quantity=2)], expected_total=200, contact_phone='123456')
+        self.assertEqual(self.client.post('/api/customer/orders', json=payload).status_code, 409)
+        payload['expected_total'] = 120
+        result = self.client.post('/api/customer/orders', json=payload)
+        self.assertEqual(result.status_code, 201, result.text)
+        self.assertEqual(result.json()['total'], 120)
+        self.assertEqual(len(self.client.get('/api/customer/orders').json()), 1)
+        self.actor = self.customer
+        self.assertEqual(self.client.get('/api/customer/orders').json(), [])
+        self.assertEqual(self.client.get('/api/customer/products').json()[0]['price'], 100)
+        self.actor = buyer
+        self.product.wholesale_price = None
+        self.db.commit()
+        self.assertIsNone(self.client.get('/api/customer/products').json()[0]['price'])
+        payload['request_key'] = str(uuid4())
+        self.assertEqual(self.client.post('/api/customer/orders', json=payload).status_code, 422)
+
     def link(self, quantity=1):
         result = self.client.put(f"/api/admin/inventory/products/{self.product.product_id}", json=[{"item_id": self.item.item_id, "quantity": quantity}])
         self.assertEqual(result.status_code, 200, result.text)
@@ -191,7 +298,7 @@ class AdminWorkspaceTests(unittest.TestCase):
         login = self.client.post('/api/auth/login', json=dict(email=payload['email'], password=payload['password']))
         self.assertEqual(login.status_code, 200, login.text)
         self.assertEqual(login.json()['role'], 'wholesaler')
-        self.assertEqual(self.client.get('/api/customer/orders').status_code, 403)
+        self.assertEqual(self.client.get('/api/customer/orders').status_code, 200)
 
     def test_product_retail_and_wholesale_prices(self):
         payload = dict(admin_id=self.admin.user_id, name='Business cards', price=2000, wholesale_price=1500)

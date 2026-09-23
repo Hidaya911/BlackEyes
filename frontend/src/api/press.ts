@@ -22,6 +22,7 @@ export interface PressCustomer {
 }
 
 export interface PressProduct {
+  is_customizable: boolean;
   product_id: number;
   name: string;
   price: number | null;
