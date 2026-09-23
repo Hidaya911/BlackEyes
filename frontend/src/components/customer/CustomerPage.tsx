@@ -60,7 +60,8 @@ export function CustomerPage({ user, onLogin, onSignup, onLogout, onProfileSaved
   const [profile, setProfile] = useState<AuthUser | null>(user);
   const [products, setProducts] = useState<CustomerProduct[]>([]);
   const [orders, setOrders] = useState<CustomerOrder[]>([]);
-  const [cart, setCart] = useState<CartLine[]>([]);
+  const [cart, setCart] = useState<CartLine[]>(() => userId ? loadBasket(userId) : []);
+  const [ordersLoading, setOrdersLoading] = useState(false);
   const [section, setSection] = useState<CustomerSection>(() => window.location.hash === '#products' ? 'Products' : 'Explore');
   const [search, setSearch] = useState('');
   const [checkout, setCheckout] = useState(false);
@@ -82,17 +83,11 @@ export function CustomerPage({ user, onLogin, onSignup, onLogout, onProfileSaved
     const controller = new AbortController();
     setLoading(true);
     setError("");
-    Promise.all([
-      userId ? getCustomerProfile(controller.signal) : Promise.resolve(null),
-      userId ? getCustomerProducts(controller.signal) : fetch('/api/products', { signal: controller.signal }).then(response => { if (!response.ok) throw new Error('Unable to load products.'); return response.json() as Promise<CustomerProduct[]>; }),
-      userId ? getCustomerOrders(controller.signal) : Promise.resolve([]),
-    ])
-      .then(([user, catalog, history]) => {
+    const catalog = userId ? getCustomerProducts(controller.signal) : fetch('/api/products', { signal: controller.signal }).then(response => { if (!response.ok) throw new Error('Unable to load products.'); return response.json() as Promise<CustomerProduct[]>; });
+    catalog
+      .then((catalog) => {
         if (controller.signal.aborted) return;
-        setProfile(user);
         setProducts(catalog);
-        setOrders(history);
-        setCart(user ? loadBasket(user.user_id) : []);
       })
       .catch((failure: Error) => {
         if (!controller.signal.aborted) setError(failure.message);
@@ -102,6 +97,23 @@ export function CustomerPage({ user, onLogin, onSignup, onLogout, onProfileSaved
       });
     return () => controller.abort();
   }, [reload, userId]);
+
+  useEffect(() => {
+    if (!userId || section !== 'Profile settings') return;
+    const controller = new AbortController();
+    getCustomerProfile(controller.signal).then(value => {
+      if (!controller.signal.aborted) setProfile(value);
+    }).catch((failure: Error) => {
+      if (!controller.signal.aborted) setError(failure.message);
+    });
+    return () => controller.abort();
+  }, [userId, section]);
+
+  async function refreshOrders() {
+    setOrdersLoading(true);
+    try { setOrders(await getCustomerOrders()); }
+    finally { setOrdersLoading(false); }
+  }
 
   function updateCart(next: CartLine[]) {
     setCart(next);
@@ -154,7 +166,7 @@ export function CustomerPage({ user, onLogin, onSignup, onLogout, onProfileSaved
   return (<div className="storefront">
     <Navbar user={profile} onNavigateToLogin={onLogin} onNavigateToSignup={onSignup} onLogout={onLogout}
       cartCount={cart.reduce((sum, line) => sum + line.quantity, 0)} onCart={() => profile ? setCheckout(true) : onLogin()}
-      onHome={goHome} onSearch={setSearch} onOrders={() => { openSection('My orders'); void getCustomerOrders().then(setOrders).catch(e => setError(e.message)); }} onProfile={() => openSection('Profile settings')} />
+      onHome={goHome} onSearch={setSearch} onOrders={() => { openSection('My orders'); void refreshOrders().catch(e => setError(e.message)); }} onProfile={() => openSection('Profile settings')} />
     <main>
       {error && <div className="alert alert-danger m-4" role="alert">{error} <button className="btn btn-sm btn-outline-danger" onClick={() => setReload(value => value + 1)}>Try again</button></div>}
       {success && <div className="customer-notice m-4" role="status">{success}</div>}
@@ -164,11 +176,12 @@ export function CustomerPage({ user, onLogin, onSignup, onLogout, onProfileSaved
       <div className={section === 'Explore' ? '' : 'storefront-account'}>
       {section !== 'Explore' && <button className="storefront-back" onClick={() => goHome()}>← Back to the shop</button>}
       {section === 'Products' && (loading ? <p role="status">Loading the collection…</p> : <Services fullCatalog products={products} onAdd={addToCart} onLogin={profile ? undefined : onLogin} search={search} wholesale={profile?.role === 'wholesaler'} />)}
-      {section === "My orders" && (
+      {section === 'My orders' && ordersLoading && <p role="status">Loading your orders…</p>}
+      {section === "My orders" && !ordersLoading && (
         <CustomerOrders
           orders={orders}
           onBrowse={() => goHome('services')}
-          onRefresh={async () => setOrders(await getCustomerOrders())}
+          onRefresh={refreshOrders}
         />
       )}
       {section === "Profile settings" && profile && (

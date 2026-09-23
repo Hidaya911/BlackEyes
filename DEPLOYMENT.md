@@ -27,7 +27,12 @@ separate from production when testing writes.
 The existing application allows artwork payloads larger than the Vercel Function
 request limit. Large uploads need direct object-storage uploads before they can
 be supported on this deployment. Existing database latency and startup schema
-updates have not been redesigned by this deployment configuration.
+updates must run separately from production requests. Before deploying a schema
+change, run `python migrate.py` from `backend/` using the target database's
+environment variables. Vercel startup skips schema inspection and migration.
+Warm PostgreSQL instances reuse a pool of at most three client connections.
+The backend function uses Singapore (`sin1`) to match the configured Supabase
+pooler region (`ap-southeast-1`). Update this if the database region changes.
 
 References: https://vercel.com/docs/services and
 https://vercel.com/docs/functions/limitations

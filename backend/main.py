@@ -1,5 +1,6 @@
 """FastAPI application setup and database startup."""
 
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -60,8 +61,9 @@ for router in (
 @app.on_event("startup")
 def startup():
     """Create missing tables, then apply updates to existing tables."""
-    Base.metadata.create_all(bind=engine)
-    apply_schema_updates(engine)
+    if os.getenv("VERCEL") != "1":
+        Base.metadata.create_all(bind=engine)
+        apply_schema_updates(engine)
 
 # from routers.search import router as search_router
 

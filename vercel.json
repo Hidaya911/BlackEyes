@@ -9,7 +9,10 @@
     "backend": {
       "root": "backend",
       "framework": "fastapi",
-      "entrypoint": "main:app"
+      "entrypoint": "main:app",
+      "functions": {
+        "main.py": { "regions": ["sin1"] }
+      }
     }
   },
   "rewrites": [

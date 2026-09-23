@@ -6,7 +6,6 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import OperationalError, TimeoutError as PoolTimeoutError
 from sqlalchemy.orm import declarative_base, sessionmaker
-from sqlalchemy.pool import NullPool
 from dotenv import load_dotenv
 
 # Load variables from .env file
@@ -22,6 +21,9 @@ connect_args = {}
 database_url = make_url(DATABASE_URL)
 pool_options = {"pool_pre_ping": True, "pool_recycle": 300}
 if database_url.get_backend_name() == "postgresql":
+    # Bound connections per warm application instance; Supavisor still pools
+    # server connections in transaction mode. Reuse avoids repeated TLS/auth.
+    pool_options.update(pool_size=2, max_overflow=1, pool_timeout=10, pool_use_lifo=True)
     connect_args.update(
         connect_timeout=10,
         keepalives=1,
@@ -33,7 +35,6 @@ if database_url.get_backend_name() == "postgresql":
         # Supavisor owns the pool. Session mode reserves a server connection for
         # every idle local connection and can exhaust the small database limit.
         database_url = database_url.set(port=6543)
-        pool_options = {"poolclass": NullPool}
 
 engine = create_engine(
     database_url,

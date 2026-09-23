@@ -150,6 +150,32 @@ class AdminWorkspaceTests(unittest.TestCase):
         payload['request_key'] = str(uuid4())
         self.assertEqual(self.client.post('/api/customer/orders', json=payload).status_code, 422)
 
+    def test_order_history_batches_queries_and_preserves_details(self):
+        from sqlalchemy import event
+        from services.order_details import order_response, order_responses
+        for _ in range(3):
+            self.assertEqual(self.client.post('/api/press/orders', json=self.order()).status_code, 201)
+        orders = self.db.query(Order).order_by(Order.order_id.desc()).all()
+        expected = [order_response(order, self.db) for order in orders]
+        queries = []
+        def count_queries(connection, cursor, statement, parameters, context, executemany):
+            queries.append(statement)
+        event.listen(self.engine, 'before_cursor_execute', count_queries)
+        try:
+            actual = order_responses(orders, self.db)
+        finally:
+            event.remove(self.engine, 'before_cursor_execute', count_queries)
+        self.assertEqual(actual, expected)
+        self.assertLessEqual(len(queries), 6)
+
+    def test_vercel_startup_does_not_run_schema_queries(self):
+        from unittest.mock import patch
+        from main import startup
+        with patch.dict(os.environ, {'VERCEL': '1'}), patch('main.Base.metadata.create_all') as create, patch('main.apply_schema_updates') as update:
+            startup()
+            create.assert_not_called()
+            update.assert_not_called()
+
     def link(self, quantity=1):
         result = self.client.put(f"/api/admin/inventory/products/{self.product.product_id}", json=[{"item_id": self.item.item_id, "quantity": quantity}])
         self.assertEqual(result.status_code, 200, result.text)

@@ -1,12 +1,12 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './index.css';
 
 import { LoginPage } from './components/auth/Login';
 import { SignupPage } from './components/auth/SignupPage';
 import type { AuthUser, UserRole } from './api/auth';
-import { AdminPage } from './components/admin/AdminPage';
-import { StaffPage } from './components/staff/StaffPage';
+const AdminPage = lazy(() => import('./components/admin/AdminPage').then(module => ({ default: module.AdminPage })));
+const StaffPage = lazy(() => import('./components/staff/StaffPage').then(module => ({ default: module.StaffPage })));
 import { CustomerPage } from './components/customer/CustomerPage';
 import { ResetPasswordPage } from './components/auth/ResetPasswordPage';
 import { ForgotPasswordPage } from './components/auth/ForgotPasswordPage';
@@ -26,6 +26,10 @@ const getInitialPage = (): Page => {
 };
 
 export function App() {
+  return <Suspense fallback={<p className="text-center p-5" role="status">Loading workspace…</p>}><AppContent /></Suspense>;
+}
+
+function AppContent() {
   const [page, setPage] = useState<Page>(getInitialPage);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
     const stored = sessionStorage.getItem(USER_KEY);

@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from utilities.files import decode_artwork, MAX_TOTAL_FILE_BYTES
 from utilities.database import commit
-from services.order_details import order_response
+from services.order_details import order_response, order_responses
 from services.inventory import consume_materials
 from services.profiles import profile_response, set_profile_image
 from database import get_db
@@ -116,9 +116,9 @@ def get_products(customer: User = Depends(require_customer), db: Session = Depen
 
 @router.get("/orders")
 def get_orders(customer: User = Depends(require_customer), db: Session = Depends(get_db)):
-    return [order_response(order, db) for order in db.query(Order).filter(
+    return order_responses(db.query(Order).filter(
         Order.customer_id == customer.user_id
-    ).order_by(Order.order_id.desc()).all()]
+    ).order_by(Order.order_id.desc()).all(), db)
 
 
 @router.post("/orders", status_code=201)
