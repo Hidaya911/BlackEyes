@@ -1,0 +1,14 @@
+.git
+.agents
+.codex
+**/.env
+**/.env.*
+**/venv
+**/.venv
+**/node_modules
+**/__pycache__
+**/*.pyc
+**/.runtime
+frontend/dist
+backend/tests
+backend/_check_*.py
