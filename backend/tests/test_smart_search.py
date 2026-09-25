@@ -2,7 +2,7 @@
 import os
 os.environ["DATABASE_URL"] = "sqlite://"
 import unittest
-from datetime import date
+from datetime import date, datetime
 from unittest.mock import patch
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -13,6 +13,7 @@ from main import app
 from models import User, Product, Order, OrderItem, Vendor, VendorPurchase, InventoryItem
 from sessions import current_user
 from services.semantic_search import perform_semantic_search, SemanticSearchUnavailable, TOPICS
+from services.search_intent import constrain_search
 
 
 class Vector(list):
@@ -87,6 +88,122 @@ class SmartSearchTests(unittest.TestCase):
     def test_unauthenticated(self):
         del app.dependency_overrides[current_user]
         self.assertEqual(self.search().status_code, 401)
+
+    def add_order(self, name, day, key, year=2026):
+        order = Order(customer_id=self.user.user_id, customer_name=name, customer_email='buyer@test.local',
+                      contact_phone='123', total_amount=25, request_key=key, created_at=datetime(year, 9, day, 14))
+        self.db.add(order)
+        self.db.flush()
+        return order.order_id
+
+    @patch('routers.search.perform_semantic_search', side_effect=AssertionError('Exact lookups must not need embeddings'))
+    def test_customer_orders_are_complete_and_strict(self, semantic):
+        expected = {self.add_order('Jana Smith', 16, 'jana-1'), self.add_order('Jana Smith', 18, 'jana-2')}
+        self.add_order('Janan Smith', 16, 'other')
+        for query in ['give me the orders of customer jana only', 'orders for Jana', 'orders of customer Jana Smith',
+                      'can you show me Jana orders please']:
+            response = self.search(q=query)
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual({r['id'] for r in response.json()['results']}, expected)
+            self.assertEqual(response.json()['matched_count'], 2)
+        self.assertEqual(self.search(q='orders for Nobody').json()['results'], [])
+
+    @patch('routers.search.perform_semantic_search', side_effect=AssertionError('Exact lookups must not need embeddings'))
+    def test_dates_and_customer_constraints_intersect(self, semantic):
+        expected = self.add_order('Jana Smith', 16, 'day-16')
+        self.add_order('Jana Smith', 18, 'day-18')
+        self.add_order('Jana Smith', 16, 'last-year', year=2025)
+        self.add_order('Other customer', 16, 'other-customer')
+        for value in ['16 September 2026', 'September 16, 2026', '2026-09-16', '16/09/2026']:
+            response = self.search(q=f'orders for Jana on {value}')
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual([r['id'] for r in response.json()['results']], [expected])
+        self.assertEqual(self.search(q='orders on 31 September 2026').status_code, 422)
+        self.assertEqual(self.search(q='orders between 16 September and 18 September').status_code, 422)
+        self.assertEqual(self.search(q='orders on 17 September 2026').json()['results'], [])
+        item = {'record_type': 'customer_invoice', 'date': datetime(2026, 9, 16)}
+        selected, _, filters, _ = constrain_search('orders on 16 september', [item], today=date(2026, 9, 25))
+        self.assertEqual(selected, [item])
+        self.assertIn('Date: 2026-09-16 (current year)', filters)
+
+    @patch('routers.search.perform_semantic_search', side_effect=AssertionError('Price comparisons must not need embeddings'))
+    def test_cheapest_uses_numeric_prices_and_active_products(self, semantic):
+        cheap = Product(name='Plain paper', price=99, status='active')
+        self.db.add_all([cheap, Product(name='Retired free sample', price=0, status='inactive'),
+                         Product(name='Premium package', price=9000, status='active')])
+        self.db.flush()
+        response = self.search(q='i need the cheapest product').json()
+        self.assertEqual(response['ordering'], 'price_min')
+        self.assertEqual(response['results'][0]['id'], cheap.product_id)
+        self.assertEqual([r['amount'] for r in response['results']], [0.99])
+        self.assertEqual(response['matched_count'], 1)
+        self.assertFalse(response['has_more'])
+        self.assertTrue(all(r['record_type'] == 'product' for r in response['results']))
+        self.assertIsNone(response['results'][0]['similarity_score'])
+        highest = self.search(q='most expensive product').json()
+        self.assertEqual([r['amount'] for r in highest['results']], [90])
+        self.assertEqual(highest['ordering'], 'price_max')
+        self.db.add(Product(name='Another cheap paper', price=99, status='active'))
+        self.db.flush()
+        tied = self.search(q='cheapest product').json()
+        self.assertEqual([r['amount'] for r in tied['results']], [0.99, 0.99])
+
+    @patch('routers.search.perform_semantic_search', side_effect=AssertionError('Vendor lookups must not use embeddings'))
+    def test_vendor_name_and_date_are_hard_constraints(self, semantic):
+        material = self.db.query(InventoryItem).first()
+        expected = []
+        for index, (name, day) in enumerate([('Cedar', 16), ('Cedar', 18), ('Cedars', 16), ('Other', 16)]):
+            vendor = self.db.query(Vendor).filter_by(name=name).first()
+            if vendor is None:
+                vendor = Vendor(name=name)
+                self.db.add(vendor)
+                self.db.flush()
+            purchase = VendorPurchase(vendor_id=vendor.vendor_id, item_id=material.item_id, quantity=1,
+                                      unit_price=10, cost=10, invoice_reference=f'VEND-{index}',
+                                      purchase_date=date(2026, 9, day), created_by=self.user.user_id,
+                                      request_key=f'vendor-search-{index}')
+            self.db.add(purchase)
+            self.db.flush()
+            if name == 'Cedar':
+                expected.append(purchase.purchase_id)
+        for query in ['invoices of vendor Cedar only', 'vendor Cedar invoices', 'supplier Cedar invoices',
+                      'Cedar invoices', "Cedar's invoices"]:
+            response = self.search(q=query)
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual({r['id'] for r in response.json()['results']}, set(expected), query)
+        for query in ['invoices from vendor Cedar on 16 September 2026',
+                      'vendor Cedar invoices with date 2026-09-16',
+                      'invoices for Cedar on September 16, 2026']:
+            response = self.search(q=query, record_type='vendor_invoice')
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual([r['id'] for r in response.json()['results']], expected[:1], query)
+        self.assertEqual(self.search(q='invoices for Cedar', record_type='vendor_invoice').json()['matched_count'], 2)
+        self.assertEqual(self.search(q='invoices of vendor Missing').json()['results'], [])
+        self.assertEqual(self.search(q='vendor Cedar invoices on 17 September 2026').json()['results'], [])
+        self.user.role = 'staff'
+        self.assertEqual(self.search(q='vendor Cedar invoices').json()['results'], [])
+        self.assertEqual(self.search(q='Cedar invoices', record_type='vendor_invoice').status_code, 403)
+
+    @patch('routers.search.perform_semantic_search', side_effect=AssertionError('Exact lookups must not need embeddings'))
+    def test_pagination_does_not_drop_customer_orders(self, semantic):
+        expected = {self.add_order('Jana', 16, f'page-{i}') for i in range(35)}
+        first = self.search(q='orders for Jana').json()
+        second = self.search(q='orders for Jana', offset=30).json()
+        self.assertEqual(first['matched_count'], 35)
+        self.assertTrue(first['has_more'])
+        self.assertFalse(second['has_more'])
+        self.assertEqual({r['id'] for r in first['results'] + second['results']}, expected)
+        self.user.role = 'staff'
+        self.assertEqual(self.search(q='vendor invoices').json()['results'], [])
+
+    @patch('routers.search.perform_semantic_search', side_effect=lambda query, items, **kw: [{**r, 'tags': [], 'similarity_score': .8} for r in items])
+    def test_descriptive_search_receives_only_constrained_records(self, semantic):
+        expected = self.add_order('Jana', 16, 'semantic-jana')
+        self.add_order('Other', 16, 'semantic-other')
+        response = self.search(q='orders for Jana on 16 September 2026 about blue foil')
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual([r['id'] for r in response.json()['results']], [expected])
+        self.assertEqual(semantic.call_args.args[0], 'blue foil')
 
 
 if __name__ == '__main__':

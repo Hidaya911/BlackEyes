@@ -7,6 +7,7 @@ from access import require_operator
 from database import get_db
 from models import Product, VendorPurchase, Vendor, InventoryItem, Order, OrderItem, User
 from services.semantic_search import perform_semantic_search, SemanticSearchUnavailable
+from services.search_intent import constrain_search
 
 router = APIRouter(prefix="/api/search", tags=["Semantic Search"])
 
@@ -16,6 +17,7 @@ def unified_semantic_search(
     q: str = Query(..., min_length=2, max_length=500),
     record_type: Literal["all", "product", "customer_invoice", "vendor_invoice"] = "all",
     limit: int = Query(30, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     operator: User = Depends(require_operator),
     db: Session = Depends(get_db),
 ):
@@ -60,6 +62,7 @@ def unified_semantic_search(
                 record_type="customer_invoice",
                 id=order.order_id,
                 title=f"{number} · {order.customer_name}",
+                customer_name=order.customer_name,
                 search_text=f"{order.customer_name}. {lines}. {order.design_request_note or ''}".strip(),
                 description=lines,
                 amount=float(order.total_amount),
@@ -80,6 +83,7 @@ def unified_semantic_search(
                 record_type="vendor_invoice",
                 id=purchase.purchase_id,
                 title=f"{reference} · {vendor}",
+                vendor_name=vendor,
                 search_text=f"{vendor}. {material}",
                 description=f"{material} (quantity {purchase.quantity})",
                 amount=float(purchase.cost),
@@ -88,15 +92,36 @@ def unified_semantic_search(
             ))
 
     try:
-        results = perform_semantic_search(query, items, top_k=limit)
+        candidates, residual, filters, price_order = constrain_search(query, items, record_type=record_type)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    try:
+        if filters and not residual:
+            results = [{**item, 'similarity_score': None, 'tags': []} for item in candidates]
+        else:
+            results = perform_semantic_search(residual or query, candidates, top_k=len(candidates))
     except SemanticSearchUnavailable as exc:
         raise HTTPException(
             503,
             "Smart Search is temporarily unavailable. Ask your administrator to check the local search model, then retry.",
         ) from exc
 
-    # search_text is internal; don't send it to the client
+    ordering = price_order or ('date_desc' if filters and not residual else 'relevance')
+    if price_order:
+        if results:
+            extreme = (min if price_order == 'price_min' else max)(item['amount'] for item in results)
+            results = [item for item in results if item['amount'] == extreme]
+            results.sort(key=lambda item: item['id'])
+    elif ordering == 'date_desc':
+        results.sort(key=lambda item: (str(item.get('date') or ''), item['id']), reverse=True)
+    matched_count = len(results)
+    results = results[offset:offset + limit]
+    # Internal fields are not part of the public result schema.
     for r in results:
         r.pop("search_text", None)
+        r.pop('customer_name', None)
+        r.pop('vendor_name', None)
 
-    return {"query": query, "results": results, "searched_count": len(items), "limit": limit}
+    return {"query": query, "results": results, "searched_count": len(items), "limit": limit,
+            'offset': offset, 'matched_count': matched_count, 'has_more': offset + len(results) < matched_count,
+            'filters': filters, 'ordering': ordering}
