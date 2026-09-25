@@ -2,9 +2,9 @@
 
 from sqlalchemy import inspect, text
 
-from . import order, payment, user, product
+from . import order, payment, user, product, vendor
 
-SCHEMA_MODULES = (user, order, payment, product)
+SCHEMA_MODULES = (user, order, payment, product, vendor)
 
 
 def apply_schema_updates(engine):

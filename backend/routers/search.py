@@ -1,59 +1,102 @@
-# from fastapi import APIRouter, Depends, Query
-# from sqlalchemy.orm import Session
-# from database import get_db
-# from models import Product, VendorPurchase, OrderItem  # Add your Order model here if you have one
-# from services.semantic_search import perform_semantic_search
+"""Role-scoped semantic search over catalog and historical invoices."""
+from collections import defaultdict
+from typing import Literal
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session, load_only
+from access import require_operator
+from database import get_db
+from models import Product, VendorPurchase, Vendor, InventoryItem, Order, OrderItem, User
+from services.semantic_search import perform_semantic_search, SemanticSearchUnavailable
 
-# router = APIRouter(prefix="/api/search", tags=["Semantic Search"])
+router = APIRouter(prefix="/api/search", tags=["Semantic Search"])
 
-# @router.get("/semantic")
-# def unified_semantic_search(
-#     q: str = Query(..., min_length=2, description="Natural language search query"),
-#     db: Session = Depends(get_db)
-# ):
-#     corpus_items = []
 
-#     # 1. Fetch and format Products
-#     products = db.query(Product).all()
-#     for p in products:
-#         corpus_items.append({
-#             "record_type": "product",
-#             "id": p.product_id,
-#             "title": p.name,
-#             "description": f"Product: {p.name}. Description: {p.description or 'No description'}. Status: {p.status}.",
-#             "price": p.price
-#         })
+@router.get("/semantic")
+def unified_semantic_search(
+    q: str = Query(..., min_length=2, max_length=500),
+    record_type: Literal["all", "product", "customer_invoice", "vendor_invoice"] = "all",
+    limit: int = Query(30, ge=1, le=100),
+    operator: User = Depends(require_operator),
+    db: Session = Depends(get_db),
+):
+    query = q.strip()
+    if len(query) < 2:
+        raise HTTPException(422, "Enter at least two non-space characters.")
+    if record_type == "vendor_invoice" and operator.role != "admin":
+        raise HTTPException(403, "Vendor invoices require administrator access.")
 
-#     # 2. Fetch and format Historical Vendor Purchases / Invoices
-#     purchases = db.query(VendorPurchase).all()
-#     for vp in purchases:
-#         corpus_items.append({
-#             "record_type": "vendor_invoice",
-#             "id": vp.purchase_id,
-#             "title": f"Vendor Invoice #{vp.purchase_id}",
-#             "description": f"Vendor purchase invoice. Notes: {vp.notes or 'None'}. Total: {vp.total_amount}.",
-#         })
+    # Each item has:
+    #   search_text -> ONLY meaningful content, this is what gets embedded
+    #   title/description/amount/status/date -> display fields returned to the UI
+    items = []
 
-#     # 3. Fetch and format Customer Invoices / Orders
-#     # (Assuming you have an Order or OrderItem model, adjust fields to match your models)
-#     order_items = db.query(OrderItem).all()
-#     for item in order_items:
-#         corpus_items.append({
-#             "record_type": "customer_invoice",
-#             "id": item.order_item_id if hasattr(item, 'order_item_id') else item.id,
-#             "title": f"Customer Order Item #{item.product_id}",
-#             "description": f"Customer order invoice item. Quantity: {item.quantity}. Price: {item.price}.",
-#         })
+    if record_type in {"all", "product"}:
+        products = db.query(Product).options(
+            load_only(Product.product_id, Product.name, Product.description,
+                      Product.status, Product.price, Product.created_at)
+        ).all()
+        for p in products:
+            items.append(dict(
+                record_type="product",
+                id=p.product_id,
+                title=p.name,
+                search_text=f"{p.name}. {p.description or ''}".strip(),
+                description=p.description or "",
+                amount=p.price / 100,
+                status=p.status,
+                date=p.created_at,
+            ))
 
-#     # 4. Perform semantic search across the entire combined corpus
-#     matched_results = perform_semantic_search(
-#         query=q, 
-#         items=corpus_items, 
-#         text_key="description", 
-#         top_k=5
-#     )
-# # 
-#     return {
-#         "query": q,
-#         "results": matched_results
-#     }
+    if record_type in {"all", "customer_invoice"}:
+        details = defaultdict(list)
+        for item in db.query(OrderItem).all():
+            details[item.order_id].append(
+                f"{item.product_name}: {item.custom_description or ''}".strip()
+            )
+        for order in db.query(Order).all():
+            number = f"INV-{order.order_id:06d}"
+            lines = "; ".join(details[order.order_id])
+            items.append(dict(
+                record_type="customer_invoice",
+                id=order.order_id,
+                title=f"{number} · {order.customer_name}",
+                search_text=f"{order.customer_name}. {lines}. {order.design_request_note or ''}".strip(),
+                description=lines,
+                amount=float(order.total_amount),
+                status=order.payment_status,
+                date=order.created_at,
+            ))
+
+    if operator.role == "admin" and record_type in {"all", "vendor_invoice"}:
+        purchases = (
+            db.query(VendorPurchase, Vendor.name, InventoryItem.name)
+            .join(Vendor, Vendor.vendor_id == VendorPurchase.vendor_id)
+            .join(InventoryItem, InventoryItem.item_id == VendorPurchase.item_id)
+            .all()
+        )
+        for purchase, vendor, material in purchases:
+            reference = purchase.invoice_reference or f"#{purchase.purchase_id}"
+            items.append(dict(
+                record_type="vendor_invoice",
+                id=purchase.purchase_id,
+                title=f"{reference} · {vendor}",
+                search_text=f"{vendor}. {material}",
+                description=f"{material} (quantity {purchase.quantity})",
+                amount=float(purchase.cost),
+                status="Purchased",
+                date=purchase.purchase_date,
+            ))
+
+    try:
+        results = perform_semantic_search(query, items, top_k=limit)
+    except SemanticSearchUnavailable as exc:
+        raise HTTPException(
+            503,
+            "Smart Search is temporarily unavailable. Ask your administrator to check the local search model, then retry.",
+        ) from exc
+
+    # search_text is internal; don't send it to the client
+    for r in results:
+        r.pop("search_text", None)
+
+    return {"query": query, "results": results, "searched_count": len(items), "limit": limit}

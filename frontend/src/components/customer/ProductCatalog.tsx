@@ -72,6 +72,9 @@ export function ProductCatalog({
 }: Props) {
   const [query, setQuery] = useState(search);
   const [sort, setSort] = useState("featured");
+  const [productType, setProductType] = useState('all');
+  const [minPrice, setMinPrice] = useState('');
+  const [maxPrice, setMaxPrice] = useState('');
   const [selected, setSelected] = useState<CustomerProduct | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [specifications, setSpecifications] = useState("");
@@ -82,12 +85,15 @@ export function ProductCatalog({
     const result = products.filter((product) =>
       `${product.name} ${product.description ?? ""}`
         .toLowerCase()
-        .includes(query.toLowerCase()),
+        .includes(query.trim().toLowerCase()) &&
+      (productType === 'all' || product.is_customizable === (productType === 'customizable')) &&
+      (minPrice === '' || (product.price != null && product.price >= Math.round(Number(minPrice) * 100))) &&
+      (maxPrice === '' || (product.price != null && product.price <= Math.round(Number(maxPrice) * 100))),
     );
     if (sort === "price") result.sort((a, b) => (a.price ?? Infinity) - (b.price ?? Infinity));
     if (sort === "name") result.sort((a, b) => a.name.localeCompare(b.name));
     return result;
-  }, [products, query, sort]);
+  }, [products, query, sort, productType, minPrice, maxPrice]);
 
   function add(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -204,6 +210,16 @@ export function ProductCatalog({
           </select>
         </div>
         }
+        {showToolbar && <div className="customer-product-filters">
+          <label>Product type<select className="form-select" value={productType} onChange={event => setProductType(event.target.value)}>
+            <option value="all">All products</option><option value="customizable">Customizable</option><option value="ready">Ready to order</option>
+          </select></label>
+          <label>Min price ($)<input className="form-control" type="number" min="0" step="0.01" placeholder="No minimum" value={minPrice} onChange={event => setMinPrice(event.target.value)} /></label>
+          <label>Max price ($)<input className="form-control" type="number" min="0" step="0.01" placeholder="No maximum" value={maxPrice} onChange={event => setMaxPrice(event.target.value)} /></label>
+          <button type="button" className="btn btn-outline-secondary" onClick={() => { setProductType('all'); setMinPrice(''); setMaxPrice(''); setQuery(''); setSort('featured'); }}>Reset filters</button>
+          <span role="status">{filtered.length} of {products.length} products</span>
+          {minPrice !== '' && maxPrice !== '' && Number(minPrice) > Number(maxPrice) && <span role="alert">Minimum price must not exceed maximum price.</span>}
+        </div>}
         {message && (
           <div className="customer-notice" role="status">
             <FaCheck />
@@ -253,11 +269,11 @@ export function ProductCatalog({
           <div className="customer-empty">
             <FaBoxOpen />
             <h3>
-              {query ? "No prints found" : "A fresh collection is on its way"}
+              {products.length ? "No prints found" : "A fresh collection is on its way"}
             </h3>
             <p>
-              {query
-                ? "Try a different product name."
+              {products.length
+                ? "Try a different search or reset your filters."
                 : "Products will appear here when the press adds them."}
             </p>
           </div>

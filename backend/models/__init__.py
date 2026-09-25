@@ -6,7 +6,7 @@ from .session import UserSession
 from .vendor import Vendor
 from .product import Product
 from .inventory import InventoryItem, InventoryTransaction
-from .purchase import VendorPurchase
+from .purchase import VendorPurchase, VendorOrder
 from .payment import VendorPayment, OrderPayment
 from .customer_price import CustomerSpecialPrice
 from .order import Order, OrderItem
@@ -26,6 +26,7 @@ __all__ = [
     "InventoryItem",
     "InventoryTransaction",
     "VendorPurchase",
+    "VendorOrder",
     "VendorPayment",
     "OrderPayment",
     "CustomerPayment",

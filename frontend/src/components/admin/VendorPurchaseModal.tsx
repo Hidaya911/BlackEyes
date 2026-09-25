@@ -10,11 +10,12 @@ interface Props {
   vendors: Vendor[];
   items: InventoryItem[];
   initialVendor: string;
+  initialDraft?: Partial<PurchaseInput>;
   onClose: () => void;
   onSaved: () => void;
 }
 
-export function VendorPurchaseModal({ adminId, vendors, items, initialVendor, onClose, onSaved }: Props) {
+export function VendorPurchaseModal({ adminId, vendors, items, initialVendor, initialDraft, onClose, onSaved }: Props) {
   const [vendorId, setVendorId] = useState(initialVendor || String(vendors[0]?.vendor_id ?? ''));
   const [form, setForm] = useState<PurchaseInput>(() => ({
     request_key: crypto.randomUUID(),
@@ -29,6 +30,7 @@ export function VendorPurchaseModal({ adminId, vendors, items, initialVendor, on
     invoice_reference: '',
     initial_payment: '0',
     payment_method: 'cash',
+    ...initialDraft,
   }));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -60,6 +62,7 @@ export function VendorPurchaseModal({ adminId, vendors, items, initialVendor, on
       </Modal.Header>
       <form onSubmit={event => void submit(event)}>
         <Modal.Body>
+          {initialDraft && <div className="alert alert-info">These fields came from an invoice scan. Confirm the vendor, date, material, quantity, units and USD price before recording.</div>}
           <p className="text-secondary small">Record materials already received. Saving adds them to inventory and records any amount paid now.</p>
           <fieldset disabled={busy} className="ledger-form-grid">
             <Field label="Vendor *">
@@ -101,7 +104,7 @@ export function VendorPurchaseModal({ adminId, vendors, items, initialVendor, on
               <input className="form-control" type="number" min="0.001" step="0.001" required value={form.quantity} onChange={event => update('quantity', event.target.value)} />
             </Field>
             <Field label="Price per unit (USD) *">
-              <input className="form-control" type="number" min="0" step="0.01" required value={form.unit_price} onChange={event => update('unit_price', event.target.value)} />
+              <input className="form-control" type="number" min="0" step="0.000001" required value={form.unit_price} onChange={event => update('unit_price', event.target.value)} />
             </Field>
             <Field label="Vendor invoice / bill reference" wide>
               <input className="form-control" placeholder="Optional, e.g. INV-2026-001" maxLength={100} value={form.invoice_reference} onChange={event => update('invoice_reference', event.target.value)} />

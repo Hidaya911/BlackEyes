@@ -1,11 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import { Modal } from 'react-bootstrap';
-import { recordVendorPayment, type PaymentInput, type VendorPurchase } from '../../api/vendorLedger';
+import { recordVendorOrderPayment, type PaymentInput, type VendorOrder } from '../../api/vendorLedger';
 import { LedgerField as Field, MethodSelect, money, today, paymentMethods } from './VendorLedgerFields';
 
 interface Props {
   adminId: number;
-  purchase: VendorPurchase;
+  purchase: VendorOrder;
   onClose: () => void;
   onSaved: () => void;
 }
@@ -27,7 +27,7 @@ export function VendorPaymentModal({ adminId, purchase, onClose, onSaved }: Prop
     setBusy(true);
     setError('');
     try {
-      await recordVendorPayment(adminId, purchase.purchase_id, form);
+      await recordVendorOrderPayment(adminId, purchase.order_id, form);
       onSaved();
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Unable to record payment.');
@@ -39,11 +39,11 @@ export function VendorPaymentModal({ adminId, purchase, onClose, onSaved }: Prop
   return (
     <Modal show onHide={() => !busy && onClose()} size="lg" centered backdrop={busy ? 'static' : true} keyboard={!busy} contentClassName="vendor-modal" aria-labelledby="payment-title">
       <Modal.Header closeButton={!busy}>
-        <Modal.Title id="payment-title">Purchase #{purchase.purchase_id} · Payments</Modal.Title>
+        <Modal.Title id="payment-title">Vendor order #{purchase.order_id} · Payments</Modal.Title>
       </Modal.Header>
       <Modal.Body>
         <h5>{purchase.vendor_name}</h5>
-        <p className="text-secondary">{purchase.item_name} · {Number(purchase.quantity)} {purchase.unit} · {purchase.purchase_date}</p>
+        <p className="text-secondary">{purchase.lines.length} items · {purchase.invoice_reference || 'No invoice reference'} · {purchase.purchase_date}</p>
         <div className="ledger-purchase-preview">
           <span>Total <strong>{money(purchase.cost)}</strong></span>
           <span>Paid <strong>{money(purchase.paid)}</strong></span>

@@ -20,7 +20,7 @@ export function Navbar({ onNavigateToLogin, onNavigateToSignup, user, cartCount 
         <span className="storefront-brand-caption d-none d-xl-block">PRESS & PRINT CO<br />BLACKEYES</span>
       </BootstrapNavbar.Brand>
       <div className="storefront-nav-actions order-lg-3">
-        <button type="button" className="storefront-basket" aria-label={`Open basket, ${cartCount} items`} onClick={onCart ?? onNavigateToLogin}><FaShoppingBag /><span>{cartCount}</span></button>
+        {user && (user.role === 'customer' || user.role === 'wholesaler') && <button type="button" className="storefront-basket" aria-label={`Open basket, ${cartCount} items`} onClick={onCart}><FaShoppingBag /><span>{cartCount}</span></button>}
         {user ? <Dropdown align="end">
           <Dropdown.Toggle variant="light" id="storefront-profile" className="storefront-profile-toggle" aria-label="Open profile menu">
             {user.profile_image ? <img src={user.profile_image} alt="" /> : <FaUser />}<span className="d-none d-xl-inline">{user.full_name.split(' ')[0]}</span>

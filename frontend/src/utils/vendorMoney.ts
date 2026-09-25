@@ -12,7 +12,8 @@ function scaled(value: string, places: number): bigint {
 export const cents = (value: string) => scaled(value, 2);
 
 export function purchaseTotalCents(quantity: string, unitPrice: string): bigint {
-  return (scaled(quantity, 3) * cents(unitPrice) + 500n) / 1000n;
+  // Quantity has 3 decimals and per-unit rates have 6; round the final amount to cents.
+  return (scaled(quantity, 3) * scaled(unitPrice, 6) + 5_000_000n) / 10_000_000n;
 }
 
 export function formatCents(value: bigint): string {
@@ -23,3 +24,6 @@ export function formatCents(value: bigint): string {
 }
 
 export const money = (value: string) => formatCents(cents(value));
+export const unitPriceMoney = (value: string) => new Intl.NumberFormat('en-US', {
+  style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 6,
+}).format(Number(value));

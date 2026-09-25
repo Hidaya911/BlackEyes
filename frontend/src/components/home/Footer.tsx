@@ -6,7 +6,7 @@ import logo from '../../assets/logo in white.png';
 
 export const Footer: React.FC = () => {
   return (
-    <footer id="contact" className="bg-dark-custom text-white pt-5 pb-3 border-top border-secondary">
+    <footer id="contact" className="storefront-footer bg-dark-custom text-white pt-5 pb-3 border-top border-secondary">
       <Container>
         <Row className="g-4 justify-content-between mb-5">
           <Col lg={4} sm={6}>

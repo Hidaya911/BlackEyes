@@ -12,8 +12,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from access import require_admin
+from sessions import current_user
 from database import get_db
-from models import InventoryItem, InventoryTransaction, User, Vendor, VendorPayment, VendorPurchase
+from models import InventoryItem, InventoryTransaction, User, Vendor, VendorPayment, VendorPurchase, VendorOrder
 
 router = APIRouter(prefix="/api/admin", tags=["Vendor ledger"])
 MoneyMethod = Literal["cash", "bank_transfer", "whish_money", "other"]
@@ -34,7 +35,7 @@ class PurchaseRequest(LedgerRequest):
     unit: str = Field(default="", max_length=30)
     low_stock_threshold: Decimal = Field(default=Decimal(0), ge=0, max_digits=14, decimal_places=3)
     quantity: Decimal = Field(gt=0, max_digits=14, decimal_places=3)
-    unit_price: Decimal = Field(ge=0, max_digits=14, decimal_places=2)
+    unit_price: Decimal = Field(ge=0, max_digits=18, decimal_places=6)
     purchase_date: date
     invoice_reference: str = Field(default="", max_length=100)
     initial_payment: Decimal = Field(default=Decimal(0), ge=0, max_digits=14, decimal_places=2)
@@ -85,6 +86,7 @@ def get_ledger(admin_id: int, db: Session = Depends(get_db)):
     ).order_by(VendorPayment.payment_date.desc(), VendorPayment.vendor_payment_id.desc()).all():
         payments_by_purchase.setdefault(payment.purchase_id, []).append({
             "vendor_payment_id": payment.vendor_payment_id,
+            "order_payment_key": payment.order_payment_key,
             "amount": str(payment.amount),
             "method": payment.method,
             "payment_date": payment.payment_date,
@@ -108,6 +110,7 @@ def get_ledger(admin_id: int, db: Session = Depends(get_db)):
         total_paid += paid
         purchases.append({
             "purchase_id": purchase.purchase_id,
+            "order_id": purchase.order_id,
             "vendor_id": purchase.vendor_id,
             "vendor_name": vendor_name,
             "item_id": item.item_id,
@@ -134,7 +137,27 @@ def get_ledger(admin_id: int, db: Session = Depends(get_db)):
         "quantity_on_hand": str(item.quantity_on_hand),
         "low_stock_threshold": str(item.low_stock_threshold),
     } for item in db.query(InventoryItem).order_by(InventoryItem.name).all()]
+    grouped = {}
+    for line in purchases:
+        key = line['order_id'] or -line['purchase_id']
+        order = grouped.setdefault(key, {**line, 'order_id': key, 'lines': [], 'cost': Decimal(0),
+                                          'paid': Decimal(0), 'remaining': Decimal(0), 'payments': []})
+        order['lines'].append(line)
+        for field in ('cost', 'paid', 'remaining'):
+            order[field] += Decimal(line[field])
+        order['payments'].extend(line['payments'])
+    for order in grouped.values():
+        combined = {}
+        for payment in order['payments']:
+            key = payment['order_payment_key'] or payment['vendor_payment_id']
+            entry = combined.setdefault(key, {**payment, 'amount': Decimal(0)})
+            entry['amount'] += Decimal(payment['amount'])
+        order['payments'] = [{**p, 'amount': str(p['amount'])} for p in combined.values()]
+        order['payment_status'] = 'paid' if order['remaining'] == 0 else 'partial' if order['paid'] > 0 else 'unpaid'
+        for field in ('cost', 'paid', 'remaining'):
+            order[field] = str(order[field])
     return {
+        "orders": list(grouped.values()),
         "purchases": purchases,
         "items": items,
         "total_cost": str(total_cost),
@@ -145,10 +168,26 @@ def get_ledger(admin_id: int, db: Session = Depends(get_db)):
 
 @router.post("/vendors/{vendor_id}/purchases", status_code=201)
 def create_purchase(vendor_id: int, payload: PurchaseRequest, db: Session = Depends(get_db)):
+    return save_purchase(vendor_id, payload, db)
+
+
+def save_purchase(vendor_id, payload, db, commit=True, reuse_existing=False, order_id=None):
     require_admin(payload.admin_id, db)
     vendor = db.query(Vendor).filter(Vendor.vendor_id == vendor_id).with_for_update().first()
     if not vendor:
         raise HTTPException(status_code=404, detail="Vendor not found.")
+    if order_id is None:
+        order = None
+        if payload.invoice_reference:
+            order = db.query(VendorOrder).filter(VendorOrder.vendor_id == vendor_id,
+                VendorOrder.purchase_date == payload.purchase_date,
+                func.lower(VendorOrder.invoice_reference) == payload.invoice_reference.lower()).first()
+        if order is None:
+            order = VendorOrder(vendor_id=vendor_id, purchase_date=payload.purchase_date,
+                                invoice_reference=payload.invoice_reference or None, created_by=payload.admin_id)
+            db.add(order)
+            db.flush()
+        order_id = order.order_id
     if db.query(VendorPurchase).filter(VendorPurchase.request_key == str(payload.request_key)).first():
         raise HTTPException(status_code=409, detail="This purchase was already recorded. Refresh the ledger to see it.")
     cost = (payload.quantity * payload.unit_price).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
@@ -167,22 +206,19 @@ def create_purchase(vendor_id: int, payload: PurchaseRequest, db: Session = Depe
             InventoryItem.type == payload.item_type,
             func.lower(InventoryItem.unit) == payload.unit.lower(),
         ).with_for_update().first()
-        if item:
+        if item and not reuse_existing:
             raise HTTPException(status_code=409, detail="This inventory item already exists. Select it from existing items.")
-        item = InventoryItem(
-            name=payload.item_name,
-            type=payload.item_type,
-            unit=payload.unit.lower(),
-            low_stock_threshold=payload.low_stock_threshold,
-            quantity_on_hand=Decimal(0),
-        )
-        db.add(item)
+        if not item:
+            item = InventoryItem(name=payload.item_name, type=payload.item_type, unit=payload.unit.lower(),
+                                 low_stock_threshold=payload.low_stock_threshold, quantity_on_hand=Decimal(0))
+            db.add(item)
 
     if item.quantity_on_hand + payload.quantity > MAX_QUANTITY:
         raise HTTPException(status_code=422, detail="Resulting inventory quantity is too large.")
     try:
         db.flush()
         purchase = VendorPurchase(
+            order_id=order_id,
             vendor_id=vendor_id,
             item_id=item.item_id,
             quantity=payload.quantity,
@@ -213,11 +249,50 @@ def create_purchase(vendor_id: int, payload: PurchaseRequest, db: Session = Depe
                 recorded_by=payload.admin_id,
                 request_key=str(uuid4()),
             ))
-        commit_ledger(db)
+        if commit:
+            commit_ledger(db)
+        else:
+            db.flush()
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=409, detail="A matching entry already exists. Refresh the ledger and select the existing item.")
     return {"purchase_id": purchase.purchase_id}
+
+
+class ExtractedPurchasesRequest(BaseModel):
+    rows: list[PurchaseRequest] = Field(min_length=1, max_length=100)
+
+    @model_validator(mode='after')
+    def same_invoice(self):
+        if len({(row.purchase_date, row.invoice_reference) for row in self.rows}) != 1:
+            raise ValueError('All items must belong to the same invoice and purchase date.')
+        return self
+
+
+@router.post('/vendors/{vendor_id}/extracted-purchases', status_code=201)
+def save_extracted_purchases(vendor_id: int, payload: ExtractedPurchasesRequest,
+                             db: Session = Depends(get_db), user: User = Depends(current_user)):
+    if user.role != 'admin' or any(row.admin_id != user.user_id for row in payload.rows):
+        raise HTTPException(403, 'Administrator access is required.')
+    keys = [str(row.request_key) for row in payload.rows]
+    if len(set(keys)) != len(keys):
+        raise HTTPException(422, 'Each extracted row must have a unique request key.')
+    if not db.query(Vendor).filter(Vendor.vendor_id == vendor_id).with_for_update().first():
+        raise HTTPException(404, 'Vendor not found.')
+    existing = db.query(VendorPurchase).filter(VendorPurchase.request_key.in_(keys)).all()
+    if existing:
+        if len(existing) == len(keys) and all(row.vendor_id == vendor_id for row in existing):
+            return {'purchase_ids': [row.purchase_id for row in existing], 'already_saved': True}
+        raise HTTPException(409, 'Some rows were already recorded. Refresh the ledger before saving again.')
+    try:
+        first = save_purchase(vendor_id, payload.rows[0], db, commit=False, reuse_existing=True)['purchase_id']
+        order_id = db.get(VendorPurchase, first).order_id
+        ids = [first] + [save_purchase(vendor_id, row, db, commit=False, reuse_existing=True, order_id=order_id)['purchase_id'] for row in payload.rows[1:]]
+        commit_ledger(db)
+        return {'order_id': order_id, 'purchase_ids': ids, 'already_saved': False}
+    except Exception:
+        db.rollback()
+        raise
 
 
 @router.post("/vendor-purchases/{purchase_id}/payments", status_code=201)

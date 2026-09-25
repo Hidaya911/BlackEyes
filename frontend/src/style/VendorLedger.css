@@ -173,16 +173,32 @@
 }
 
 .ledger-payment-button {
-  color: #26687f;
-  background: #ecf6fa;
+  color: #fff;
+  background: #17687a;
+  border: 1px solid #105263;
+  border-radius: 9px;
+  padding: 10px 15px;
+  min-height: 40px;
+  font-weight: 700;
+  box-shadow: 0 3px 7px #16495e26;
+  cursor: pointer;
   white-space: nowrap;
   font-size: 11px;
 }
 
 .ledger-payment-button:hover {
-  color: #174457;
-  background: #d9edf5;
+  color: #fff;
+  background: #104e5d;
+  border-color: #104e5d;
 }
+
+.ledger-payment-button:focus-visible { outline: 3px solid #31afc4; outline-offset: 3px; }
+.ledger-payment-button:active { transform: translateY(1px); }
+.vendor-order-lines summary { cursor: pointer; color: #17687a; font-weight: 700; padding: 8px 0; }
+.vendor-order-lines summary:focus-visible { outline: 2px solid #238ba1; outline-offset: 3px; }
+.vendor-order-line { padding: 9px 0; border-bottom: 1px solid #e4edf2; }
+.invoice-save-bar { display: grid; justify-items: start; gap: 10px; margin-top: 20px; padding: 18px; background: #e7f3f3; border: 1px solid #c4dfdf; border-radius: 12px; }
+.invoice-save-bar small { color: #536d79; font-size: 11px; }
 
 .ledger-inventory {
   margin-top: 22px;

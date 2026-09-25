@@ -38,11 +38,27 @@ export interface VendorPurchase {
 }
 
 export interface VendorLedgerData {
+  orders: VendorOrder[];
   purchases: VendorPurchase[];
   items: InventoryItem[];
   total_cost: string;
   total_paid: string;
   remaining: string;
+}
+
+export interface VendorOrder extends VendorPurchase {
+  order_id: number;
+  lines: VendorPurchase[];
+}
+
+export function deleteVendorOrder(orderId: number) {
+  return request<{ deleted_order_id: number }>(`vendor-orders/${orderId}`, { method: 'DELETE' });
+}
+
+export function recordVendorOrderPayment(adminId: number, orderId: number, input: PaymentInput) {
+  return request<{ order_id: number }>(`vendor-orders/${orderId}/payments`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ admin_id: adminId, ...input }),
+  });
 }
 
 export interface PurchaseInput {
@@ -99,5 +115,12 @@ export function recordVendorPayment(adminId: number, purchaseId: number, input: 
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ admin_id: adminId, ...input }),
+  });
+}
+
+export function saveExtractedPurchases(adminId: number, vendorId: number, rows: PurchaseInput[]) {
+  return request<{ purchase_ids: number[] }>(`vendors/${vendorId}/extracted-purchases`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rows: rows.map(row => ({ ...row, admin_id: adminId })) }),
   });
 }

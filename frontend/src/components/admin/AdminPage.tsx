@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { SmartSearch } from '../press/SmartSearch';
 import { FaArrowRight, FaBoxOpen, FaChartLine, FaChevronDown, FaClipboardList, FaCog, FaLayerGroup, FaSearch, FaSignOutAlt, FaTruck, FaUsers } from 'react-icons/fa';
-import { Dropdown } from 'react-bootstrap';
+import { Dropdown, Offcanvas } from 'react-bootstrap';
+import { FaBars } from 'react-icons/fa';
 import type { AuthUser } from '../../api/auth';
 import { ProductManager } from './ProductManager';
 import { StaffManager } from './StaffManager';
@@ -16,9 +18,10 @@ import { DocumentCenter } from '../press/documents/DocumentCenter';
 import { CustomerLedger } from '../press/ledger/CustomerLedger';
 import logo from '../../assets/logo in white.png';
 import '../../style/AdminPage.css';
+import '../../style/WorkspaceResponsive.css';
 
 interface Props { onNavigateHome: () => void; adminId?: number; user: AuthUser | null; }
-const links = [['Dashboard', FaLayerGroup], ['Orders', FaClipboardList], ['New walk-in order', FaClipboardList], ['Invoices & receipts', FaClipboardList], ['Products', FaBoxOpen], ['Create staff', FaUsers], ['Vendors', FaTruck], ['Customers', FaUsers], ['Customer ledger', FaClipboardList], ['Reports', FaChartLine], ['Settings', FaCog]] as const;
+const links = [['Dashboard', FaLayerGroup], ['Smart Search', FaSearch], ['Orders', FaClipboardList], ['New walk-in order', FaClipboardList], ['Invoices & receipts', FaClipboardList], ['Products', FaBoxOpen], ['Create staff', FaUsers], ['Vendors', FaTruck], ['Customers', FaUsers], ['Customer ledger', FaClipboardList], ['Reports', FaChartLine], ['Settings', FaCog]] as const;
 
 function AdminAvatar({ profile }: { profile: AuthUser | null }) {
   const [failedImage, setFailedImage] = useState<string | null>(null);
@@ -58,12 +61,14 @@ function AdminAvatar({ profile }: { profile: AuthUser | null }) {
 
 export const AdminPage = ({ onNavigateHome, adminId, user }: Props) => {
   const [section, setSection] = useState('Dashboard');
+  const [menu, setMenu] = useState(false);
   const [profile, setProfile] = useState<AuthUser | null>(user);
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [orderNotice, setOrderNotice] = useState('');
   const matchingSections = links.filter(([label]) => label.toLowerCase().includes(search.trim().toLowerCase()));
   const navigateToSection = (label: string) => {
+    setMenu(false);
     setSection(label);
     setSearch('');
     setSearchOpen(false);
@@ -73,6 +78,9 @@ export const AdminPage = ({ onNavigateHome, adminId, user }: Props) => {
   let content;
 
   switch (section) {
+    case 'Smart Search':
+      content = <SmartSearch isAdmin />;
+      break;
     case 'Customer ledger':
       content = <CustomerLedger />;
       break;
@@ -118,11 +126,12 @@ export const AdminPage = ({ onNavigateHome, adminId, user }: Props) => {
       );
   }
   return (
-    <main className="min-vh-100 d-flex" style={{ background: '#f4f7fb' }}>
-      <aside
-        className="d-flex flex-column"
+    <main className="admin-workspace min-vh-100 d-flex" style={{ background: '#f4f7fb' }}>
+      <Offcanvas responsive="lg" show={menu} onHide={() => setMenu(false)} id="admin-navigation" aria-label="Admin navigation"
+        className="admin-sidebar flex-column"
         style={{ width: 250, flex: '0 0 250px', background: '#090e1b', padding: '28px 16px', color: '#a7b2c4' }}
       >
+        <Offcanvas.Header closeButton closeVariant="white" className="d-lg-none"><Offcanvas.Title>Navigation</Offcanvas.Title></Offcanvas.Header>
         <img src={logo} alt="Blackeyes" style={{ width: 112, margin: '0 12px 28px' }} />
         <small className="text-uppercase px-2 mb-3" style={{ letterSpacing: '1px', fontSize: 10 }}>
           Press management
@@ -161,9 +170,10 @@ export const AdminPage = ({ onNavigateHome, adminId, user }: Props) => {
             </div>
           </div>
         </div>
-      </aside>
+      </Offcanvas>
       <section className="flex-grow-1 p-4 p-lg-5" style={{ minWidth: 0 }}>
         <header className="admin-topbar">
+          <button type="button" className="btn btn-light d-lg-none" aria-label="Open navigation" aria-controls="admin-navigation" aria-expanded={menu} onClick={() => setMenu(true)}><FaBars /></button>
           <div className="admin-heading">
             <div className="admin-wordmark">
               <span className="admin-print-dots" aria-hidden="true"><i /><i /><i /></span>

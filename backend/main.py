@@ -24,6 +24,9 @@ from routers import admin_customers, admin_inventory, admin_reports
 from routers import order_documents
 from routers import customer_ledger
 from routers import wholesale
+from routers import search
+from routers import vendor_invoice_ocr
+from routers import vendor_orders
 
 app = FastAPI()
 
@@ -36,6 +39,9 @@ app.add_middleware(
 )
 
 for router in (
+    vendor_orders.router,
+    vendor_invoice_ocr.router,
+    search.router,
     wholesale.router,
     admin_customers.directory_router,
     customer_ledger.router,
@@ -64,7 +70,3 @@ def startup():
     if os.getenv("VERCEL") != "1":
         Base.metadata.create_all(bind=engine)
         apply_schema_updates(engine)
-
-# from routers.search import router as search_router
-
-# app.include_router(search_router)

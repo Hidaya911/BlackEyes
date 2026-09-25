@@ -8,6 +8,7 @@ class VendorPayment(Base):
     __table_args__ = (CheckConstraint("amount > 0", name="ck_vendor_payment_amount"),)
 
     vendor_payment_id = Column(Integer, primary_key=True, autoincrement=True)
+    order_payment_key = Column(String(36), nullable=True, index=True)
     purchase_id = Column(Integer, ForeignKey("vendor_purchases.purchase_id", ondelete="RESTRICT"), nullable=False, index=True)
     amount = Column(Numeric(14, 2), nullable=False)
     method = Column(String(20), nullable=False)

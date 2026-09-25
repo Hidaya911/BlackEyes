@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
-import { Dropdown } from "react-bootstrap";
+import { SmartSearch } from '../press/SmartSearch';
+import { Dropdown, Offcanvas } from "react-bootstrap";
 import {
   FaBars,
+  FaSearch,
   FaClipboardList,
   FaCog,
   FaPlus,
@@ -20,8 +22,10 @@ import { StaffSettings } from "./StaffSettings";
 import { ProfileAvatar } from "./ProfileAvatar";
 import logo from "../../assets/logo in white.png";
 import "../../style/PressWorkspace.css";
+import '../../style/WorkspaceResponsive.css';
 
 const sections = [
+  ["Smart Search", FaSearch],
   ["Orders", FaClipboardList],
   ["Customers", FaClipboardList],
   ["New walk-in order", FaPlus],
@@ -92,18 +96,11 @@ export function StaffPage({
 
   return (
     <main className="staff-workspace">
-      {menu && (
-        <button
-          className="staff-menu-shade"
-          aria-label="Close navigation"
-          onClick={() => setMenu(false)}
-        />
-      )}
-      <aside className={`staff-sidebar${menu ? " is-open" : ""}`}>
+      <Offcanvas responsive="lg" show={menu} onHide={() => setMenu(false)} id="staff-navigation" aria-label="Staff navigation" className="staff-sidebar">
         <div className="staff-brand">
           <img src={logo} alt="Blackeyes" />
           <button
-            className="staff-menu-close"
+            className="staff-menu-close d-lg-none"
             aria-label="Close navigation"
             onClick={() => setMenu(false)}
           >
@@ -141,11 +138,12 @@ export function StaffPage({
         <button className="staff-logout" onClick={onLogout}>
           <FaSignOutAlt /> Log out
         </button>
-      </aside>
+      </Offcanvas>
       <section className="staff-content">
         <header className="staff-topbar">
           <button
-            className="staff-menu-toggle"
+            className="staff-menu-toggle d-lg-none"
+            aria-controls="staff-navigation"
             aria-label="Open navigation"
             aria-expanded={menu}
             onClick={() => setMenu(true)}
@@ -196,6 +194,7 @@ export function StaffPage({
         {section === 'Invoices & receipts' && <DocumentCenter />}
         {section === "Customers" && <CustomerManager readOnly />}
         {section === 'Customer ledger' && <CustomerLedger />}
+        {section === 'Smart Search' && <SmartSearch />}
         {section === "New walk-in order" && (
           <WalkInOrder
             onCancel={() => navigate("Orders")}

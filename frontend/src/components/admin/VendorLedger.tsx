@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
+import { Modal } from 'react-bootstrap';
 import { FaArrowDown, FaBoxOpen, FaMoneyBillWave, FaPlus, FaReceipt, FaSyncAlt } from 'react-icons/fa';
 import type { Vendor } from '../../api/vendors';
-import { getVendorLedger, type VendorLedgerData, type VendorPurchase } from '../../api/vendorLedger';
+import { getVendorLedger, deleteVendorOrder, type VendorLedgerData, type VendorOrder } from '../../api/vendorLedger';
 import { VendorPurchaseModal } from './VendorPurchaseModal';
 import { VendorPaymentModal } from './VendorPaymentModal';
+import { VendorInvoiceParser } from './VendorInvoiceParser';
 import { money } from './VendorLedgerFields';
-import { cents, formatCents } from '../../utils/vendorMoney';
+import { cents, formatCents, unitPriceMoney } from '../../utils/vendorMoney';
 import '../../style/VendorLedger.css';
 
 export function VendorLedger({ adminId, vendors }: { adminId?: number; vendors: Vendor[] }) {
@@ -16,7 +18,10 @@ export function VendorLedger({ adminId, vendors }: { adminId?: number; vendors: 
   const [vendorFilter, setVendorFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showPurchase, setShowPurchase] = useState(false);
-  const [selected, setSelected] = useState<VendorPurchase | null>(null);
+  const [selected, setSelected] = useState<VendorOrder | null>(null);
+  const [deleting, setDeleting] = useState<VendorOrder | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
   const [message, setMessage] = useState('');
 
   useEffect(() => {
@@ -41,7 +46,7 @@ export function VendorLedger({ adminId, vendors }: { adminId?: number; vendors: 
   }, [adminId, reload, vendors]);
 
   const accountFilter = vendors.some(vendor => String(vendor.vendor_id) === vendorFilter) ? vendorFilter : '';
-  const vendorPurchases = (data?.purchases ?? []).filter(entry => !accountFilter || entry.vendor_id === Number(accountFilter));
+  const vendorPurchases = (data?.orders ?? []).filter(entry => !accountFilter || entry.vendor_id === Number(accountFilter));
   const filtered = vendorPurchases.filter(entry => statusFilter === 'all' || entry.payment_status === statusFilter);
   const totals = vendorPurchases.reduce((sum, entry) => ({
     cost: sum.cost + cents(entry.cost),
@@ -49,13 +54,23 @@ export function VendorLedger({ adminId, vendors }: { adminId?: number; vendors: 
     remaining: sum.remaining + cents(entry.remaining),
   }), { cost: 0n, paid: 0n, remaining: 0n });
   const unavailable = loading || !!loadError || !data;
+  async function removeOrder() {
+    if (!deleting || deleteBusy) return;
+    setDeleteBusy(true); setDeleteError('');
+    try {
+      await deleteVendorOrder(deleting.order_id);
+      setDeleting(null); setMessage('Vendor order deleted. Its received quantities have been removed from stock.');
+      setReload(value => value + 1);
+    } catch (failure) { setDeleteError(failure instanceof Error ? failure.message : 'Unable to delete order.'); }
+    finally { setDeleteBusy(false); }
+  }
 
   return (
     <section className="vendor-ledger" aria-label="Vendor purchases and payments">
       <div className="ledger-heading">
         <div>
           <span className="vendor-eyebrow">FROM DELIVERY TO SETTLEMENT</span>
-          <h2>Purchases & payments</h2>
+          <h2>Vendor orders & payments</h2>
           <p>Record incoming materials. Keep every payment and every balance in view.</p>
         </div>
         <button className="btn vendor-primary" disabled={unavailable || !vendors.length} onClick={() => setShowPurchase(true)}>
@@ -63,6 +78,10 @@ export function VendorLedger({ adminId, vendors }: { adminId?: number; vendors: 
         </button>
       </div>
       {message && <div className="alert alert-success" role="status">{message}</div>}
+      {adminId && data && <VendorInvoiceParser adminId={adminId} vendors={vendors} items={data.items} purchases={data.purchases} onSaved={() => {
+        setMessage('Extracted purchases saved to vendor orders. Stock and the vendor balance have been updated.');
+        setReload(value => value + 1);
+      }} />}
       <div className="ledger-toolbar">
         <label>
           <span>Vendor account</span>
@@ -104,22 +123,27 @@ export function VendorLedger({ adminId, vendors }: { adminId?: number; vendors: 
             <table className="table ledger-table align-middle">
               <thead>
                 <tr>
-                  <th>Purchase / vendor</th><th>Materials received</th><th>Total</th>
-                  <th>Paid / remaining</th><th>Status</th><th>Payments</th>
+                  <th>Order / vendor</th><th>Materials received</th><th>Total</th>
+                  <th>Paid / remaining</th><th>Status</th><th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map(entry => (
-                  <tr key={entry.purchase_id}>
+                  <tr key={entry.order_id}>
                     <td>
                       <strong>{entry.vendor_name}</strong>
-                      <small>#{entry.purchase_id} · {entry.purchase_date}</small>
+                      <small>Order #{entry.order_id} · {entry.purchase_date}</small>
                       <small>{entry.invoice_reference || 'No invoice reference'}</small>
                       <small>Recorded by {entry.created_by}</small>
                     </td>
                     <td>
-                      <strong>{entry.item_name}</strong>
-                      <small>{Number(entry.quantity)} {entry.unit} × {money(entry.unit_price)}</small>
+                      <details className="vendor-order-lines">
+                        <summary>{entry.lines.length} {entry.lines.length === 1 ? 'item' : 'items'} · View details</summary>
+                        {entry.lines.map(line => <div key={line.purchase_id} className="vendor-order-line">
+                          <strong>{line.item_name}</strong>
+                          <small>{Number(line.quantity)} {line.unit} × {unitPriceMoney(line.unit_price)} = {money(line.cost)}</small>
+                        </div>)}
+                      </details>
                     </td>
                     <td className="text-nowrap">{money(entry.cost)}</td>
                     <td>
@@ -135,6 +159,7 @@ export function VendorLedger({ adminId, vendors }: { adminId?: number; vendors: 
                       <button className="btn btn-sm ledger-payment-button" onClick={() => setSelected(entry)}>
                         {entry.payment_status === 'paid' ? 'View history' : 'Pay / history'}
                       </button>
+                      <button type="button" className="btn btn-outline-danger btn-sm mt-2 d-block" onClick={() => { setDeleting(entry); setDeleteError(''); }} aria-label={`Delete vendor order ${entry.order_id}`}>Delete order</button>
                     </td>
                   </tr>
                 ))}
@@ -184,6 +209,15 @@ export function VendorLedger({ adminId, vendors }: { adminId?: number; vendors: 
           }}
         />
       )}
+      <Modal show={!!deleting} onHide={() => !deleteBusy && setDeleting(null)} centered backdrop={deleteBusy ? 'static' : true} keyboard={!deleteBusy}>
+        <Modal.Header closeButton={!deleteBusy}><Modal.Title>Delete vendor order #{deleting?.order_id}?</Modal.Title></Modal.Header>
+        <Modal.Body>
+          <p>Delete {deleting?.invoice_reference || 'this order'} for <strong>{deleting?.vendor_name}</strong> and all {deleting?.lines.length} items?</p>
+          <p className="text-secondary">The received quantities will be removed from stock. Orders with recorded payments or insufficient stock cannot be deleted.</p>
+          {deleteError && <div className="alert alert-danger" role="alert">{deleteError}</div>}
+        </Modal.Body>
+        <Modal.Footer><button className="btn btn-light" disabled={deleteBusy} onClick={() => setDeleting(null)}>Keep order</button><button className="btn btn-danger" disabled={deleteBusy} onClick={() => void removeOrder()}>{deleteBusy ? 'Deleting…' : 'Delete order & reverse stock'}</button></Modal.Footer>
+      </Modal>
       {selected && adminId && (
         <VendorPaymentModal
           adminId={adminId}
