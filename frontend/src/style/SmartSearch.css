@@ -1,3 +1,4 @@
+/* Semantic search temporarily disabled. Original styles preserved below.
 .smart-search { color: #172a40; min-width: 0; }
 .smart-hero { padding: clamp(24px,4vw,48px); background: radial-gradient(ellipse at 100% 0,#165566 0,transparent 60%),linear-gradient(120deg,#101c30,#252139); color: #fff; border-radius: 24px; margin-bottom: 24px; }
 .smart-eyebrow { color: #85dfdf; font-size: 10px; font-weight: 700; letter-spacing: 1.7px; }
@@ -32,3 +33,4 @@
 .smart-error { background: #fff1f1; color: #913b43; padding: 20px; margin: 0 24px 24px; border-radius: 12px; }.smart-error button { border: 0; background: transparent; text-decoration: underline; color: inherit; }
 @media(max-width: 900px) { .smart-table thead { display: none; }.smart-table,.smart-table tbody,.smart-table tr,.smart-table td { display: block; width: 100%; }.smart-table tr { padding: 15px 20px; border-top: 1px solid #e1e8ef; }.smart-table td { border: 0; padding: 6px 0; }.smart-table td:not(:first-child) { display: flex; gap: 12px; align-items: baseline; }.smart-table td:not(:first-child)::before { content: attr(data-label); width: 100px; flex-shrink: 0; font-size: 11px; color: #64748b; } }
 @media(max-width: 600px) { .smart-hero form { flex-wrap: wrap; }.smart-hero form button { width: 100%; }.smart-hero input { width: calc(100% - 50px); }.smart-toolbar { padding: 20px; }.smart-eyebrow { font-size: 9px; letter-spacing: 1px; } }
+*/

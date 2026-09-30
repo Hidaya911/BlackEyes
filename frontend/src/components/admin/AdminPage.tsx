@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { SmartSearch } from '../press/SmartSearch';
+// import { SmartSearch } from '../press/SmartSearch';
 import { FaArrowRight, FaBoxOpen, FaChartLine, FaChevronDown, FaClipboardList, FaCog, FaLayerGroup, FaSearch, FaSignOutAlt, FaTruck, FaUsers } from 'react-icons/fa';
 import { Dropdown, Offcanvas } from 'react-bootstrap';
 import { FaBars } from 'react-icons/fa';
@@ -21,7 +21,7 @@ import '../../style/AdminPage.css';
 import '../../style/WorkspaceResponsive.css';
 
 interface Props { onNavigateHome: () => void; adminId?: number; user: AuthUser | null; }
-const links = [['Dashboard', FaLayerGroup], ['Smart Search', FaSearch], ['Orders', FaClipboardList], ['New walk-in order', FaClipboardList], ['Invoices & receipts', FaClipboardList], ['Products', FaBoxOpen], ['Create staff', FaUsers], ['Vendors', FaTruck], ['Customers', FaUsers], ['Customer ledger', FaClipboardList], ['Reports', FaChartLine], ['Settings', FaCog]] as const;
+const links = [['Dashboard', FaLayerGroup], /* ['Smart Search', FaSearch], */ ['Orders', FaClipboardList], ['New walk-in order', FaClipboardList], ['Invoices & receipts', FaClipboardList], ['Products', FaBoxOpen], ['Create staff', FaUsers], ['Vendors', FaTruck], ['Customers', FaUsers], ['Customer ledger', FaClipboardList], ['Reports', FaChartLine], ['Settings', FaCog]] as const;
 
 function AdminAvatar({ profile }: { profile: AuthUser | null }) {
   const [failedImage, setFailedImage] = useState<string | null>(null);
@@ -78,9 +78,9 @@ export const AdminPage = ({ onNavigateHome, adminId, user }: Props) => {
   let content;
 
   switch (section) {
-    case 'Smart Search':
-      content = <SmartSearch isAdmin />;
-      break;
+    // case 'Smart Search':
+    //   content = <SmartSearch isAdmin />;
+    //   break;
     case 'Customer ledger':
       content = <CustomerLedger />;
       break;

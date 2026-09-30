@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { SmartSearch } from '../press/SmartSearch';
+// import { SmartSearch } from '../press/SmartSearch';
 import { Dropdown, Offcanvas } from "react-bootstrap";
 import {
   FaBars,
-  FaSearch,
+  // FaSearch,
   FaClipboardList,
   FaCog,
   FaPlus,
@@ -25,7 +25,7 @@ import "../../style/PressWorkspace.css";
 import '../../style/WorkspaceResponsive.css';
 
 const sections = [
-  ["Smart Search", FaSearch],
+  // ["Smart Search", FaSearch],
   ["Orders", FaClipboardList],
   ["Customers", FaClipboardList],
   ["New walk-in order", FaPlus],
@@ -194,7 +194,7 @@ export function StaffPage({
         {section === 'Invoices & receipts' && <DocumentCenter />}
         {section === "Customers" && <CustomerManager readOnly />}
         {section === 'Customer ledger' && <CustomerLedger />}
-        {section === 'Smart Search' && <SmartSearch />}
+        {/* {section === 'Smart Search' && <SmartSearch />} */}
         {section === "New walk-in order" && (
           <WalkInOrder
             onCancel={() => navigate("Orders")}
