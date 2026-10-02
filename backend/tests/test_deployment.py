@@ -44,6 +44,26 @@ class DeploymentTests(unittest.TestCase):
             self.assertEqual(load_settings().cors_origins, [])
         self.assertTrue(load_settings().cookie_secure)
 
+    def test_copied_website_urls_are_normalized(self):
+        origin = 'https://black-eyes-jdcaf7dju-teamss1.vercel.app'
+        with patch.dict(os.environ, {'FRONTEND_URL': f' {origin}/\n',
+                                     'CORS_ORIGINS': f' {origin}/, https://print.example.com/ '}):
+            settings = load_settings()
+            self.assertEqual(settings.frontend_url, origin)
+            self.assertEqual(settings.cors_origins, [origin, 'https://print.example.com'])
+
+    def test_invalid_origin_error_identifies_setting_without_exposing_value(self):
+        for name in ('FRONTEND_URL', 'CORS_ORIGINS'):
+            for value in ('https://example.com/path', 'https://example.com/?token=private',
+                          'https://example.com/#fragment', 'https://example.com:invalid',
+                          'https://example.com:99999', 'https://exa mple.com',
+                          'https://user:private@example.com'):
+                with self.subTest(name=name, value=value), patch.dict(os.environ, {name: value}):
+                    with self.assertRaises(RuntimeError) as caught:
+                        load_settings()
+                    self.assertIn(name, str(caught.exception))
+                    self.assertNotIn('private', str(caught.exception))
+
     def test_vercel_requires_production_cookie_policy(self):
         with patch.dict(os.environ, {'APP_ENV': 'development', 'VERCEL': '1', 'COOKIE_SECURE': 'false'}):
             with self.assertRaises(RuntimeError):

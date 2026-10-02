@@ -98,6 +98,47 @@ class InvoiceOCRAPITests(unittest.TestCase):
     def upload(self, content=None, mime='image/png'):
         return self.client.post('/api/admin/vendor-invoices/parse', content=image_bytes() if content is None else content, headers={'Content-Type': mime})
 
+    def browser_upload(self, text=SAMPLE, confidence=95):
+        return self.client.post('/api/admin/vendor-invoices/parse-text', json={
+            'passes': [{'text': text, 'confidence': confidence, 'words': []}]})
+
+    @patch('routers.vendor_invoice_ocr.extract_invoice')
+    def test_browser_ocr_preserves_review_and_save_without_native_tesseract(self, native):
+        response = self.browser_upload()
+        self.assertEqual(response.status_code, 200, response.text)
+        extracted = response.json()
+        self.assertEqual(extracted['suggested_vendor_id'], self.vendor.vendor_id)
+        self.assertEqual(extracted['total'], '75.00')
+        self.assertEqual(self.db.query(VendorPurchase).count(), 0)
+        native.assert_not_called()
+        row = extracted['items'][0]
+        payload = dict(admin_id=self.admin.user_id, request_key=str(uuid4()),
+                       item_name=row['item_name'], item_type='paper', unit='reams',
+                       quantity=row['quantity'], unit_price=row['unit_price'],
+                       purchase_date=extracted['purchase_date'], invoice_reference=extracted['invoice_reference'])
+        path = f'/api/admin/vendors/{self.vendor.vendor_id}/extracted-purchases'
+        saved = self.client.post(path, json={'rows': [payload]})
+        self.assertEqual(saved.status_code, 201, saved.text)
+        self.assertEqual(self.client.post(path, json={'rows': [payload]}).status_code, 201)
+        self.assertEqual(self.db.query(VendorPurchase).count(), 1)
+        self.assertEqual(float(self.db.query(InventoryItem).one().quantity_on_hand), 10)
+
+    def test_browser_ocr_rejects_unauthorized_and_invalid_data(self):
+        for role in ['staff', 'customer', 'wholesaler']:
+            self.admin.role = role
+            self.assertEqual(self.browser_upload().status_code, 403)
+        self.admin.role = 'admin'
+        self.assertEqual(self.browser_upload('').status_code, 422)
+        self.assertEqual(self.browser_upload(confidence=101).status_code, 422)
+        self.assertEqual(self.browser_upload('x' * 100001).status_code, 422)
+        self.assertEqual(self.client.post('/api/admin/vendor-invoices/parse-text', content=b'x' * (2 * 1024 * 1024 + 1)).status_code, 413)
+        del app.dependency_overrides[current_user]
+        self.assertEqual(self.browser_upload().status_code, 401)
+
+    def test_browser_ocr_low_confidence_is_flagged(self):
+        result = self.browser_upload(confidence=30).json()
+        self.assertTrue(any('quality is low' in warning for warning in result['warnings']))
+
     @patch('services.invoice_ocr._recognize', return_value=(SAMPLE, 95, []))
     def test_admin_can_extract_without_writes(self, recognize):
         response = self.upload()

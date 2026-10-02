@@ -23,6 +23,23 @@ class Settings:
     frontend_url: str
 
 
+def normalize_origin(value: str, name: str, production: bool) -> str:
+    value = value.strip()
+    message = f'{name} must be a website origin (https://your-domain), without credentials, paths, queries, or fragments; production requires HTTPS.'
+    try:
+        parsed = urlsplit(value)
+        parsed.port  # Validate malformed and out-of-range ports too.
+        if (not parsed.hostname or parsed.scheme not in ({'https'} if production else {'http', 'https'})
+                or parsed.username is not None or parsed.password is not None
+                or parsed.path not in {'', '/'} or '?' in value or '#' in value
+                or any(character.isspace() for character in value)
+                or any(character in value for character in ('*', '\\', '"', "'", ','))):
+            raise ValueError
+    except ValueError:
+        raise RuntimeError(message) from None
+    return f'{parsed.scheme}://{parsed.netloc}'
+
+
 def load_settings() -> Settings:
     reset_token_secret()
     environment = os.getenv('APP_ENV', 'development').lower()
@@ -36,10 +53,6 @@ def load_settings() -> Settings:
         'CORS_ORIGINS', '' if production else 'http://localhost:5173,http://127.0.0.1:5173'
     ).split(',') if origin.strip()]
     frontend = os.getenv('FRONTEND_URL', '' if production else 'http://localhost:5173')
-    for origin in [*origins, frontend]:
-        parsed = urlsplit(origin)
-        if (not parsed.hostname or parsed.scheme not in ({'https'} if production else {'http', 'https'})
-                or parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment
-                or '*' in origin):
-            raise RuntimeError('CORS_ORIGINS and FRONTEND_URL must be explicit origins without paths; production requires HTTPS.')
+    origins = [normalize_origin(origin, 'CORS_ORIGINS', production) for origin in origins]
+    frontend = normalize_origin(frontend, 'FRONTEND_URL', production)
     return Settings(origins, secure == 'true', frontend)

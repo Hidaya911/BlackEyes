@@ -1,5 +1,25 @@
 # Backend setup and deployment
 
+## Invoice OCR on Vercel
+
+Invoice recognition now runs in the browser using Tesseract.js. Upload, review,
+vendor matching, and recording purchases keep the same flow. The image stays in
+the browser; recognized text and word positions go to the authenticated
+`/api/admin/vendor-invoices/parse-text` endpoint for the existing invoice parser.
+Parsing does not save purchases; the administrator still reviews and saves them.
+
+Deploy the frontend and backend together. `npm ci` installs the locked OCR runtime
+and English model; `npm run build` copies their files into the frontend's static
+`/ocr/` directory automatically. No Tesseract server installation, paid service,
+API key, or database migration is needed for this flow. The first scan downloads
+the recognition files; allow up to two minutes on slower devices/connections.
+JPEG, PNG, and WebP limits remain 8 MB and 16 megapixels. English recognition is
+the same language default as the previous server flow.
+
+The original image-upload API remains available for older clients on servers
+with native Tesseract installed. Current frontend clients use browser OCR only.
+For custom security headers, allow same-origin workers and WebAssembly execution.
+
 Install `requirements.txt`, copy `.env.example` to `.env`, and set `DATABASE_URL` and
 `RESET_TOKEN_SECRET`. Generate the secret with
 `python -c "import secrets; print(secrets.token_urlsafe(48))"`. Keep it in your
