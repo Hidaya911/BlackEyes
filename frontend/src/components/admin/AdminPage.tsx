@@ -1,63 +1,18 @@
+import { AdminAvatar } from './AdminAvatar';
+import { AdminSection } from './AdminSection';
 import { useState } from 'react';
 // import { SmartSearch } from '../press/SmartSearch';
 import { FaArrowRight, FaBoxOpen, FaChartLine, FaChevronDown, FaClipboardList, FaCog, FaLayerGroup, FaSearch, FaSignOutAlt, FaTruck, FaUsers } from 'react-icons/fa';
 import { Dropdown, Offcanvas } from 'react-bootstrap';
 import { FaBars } from 'react-icons/fa';
 import type { AuthUser } from '../../api/auth';
-import { ProductManager } from './ProductManager';
-import { StaffManager } from './StaffManager';
-import { VendorManager } from './VendorManager';
-import { OrderManager } from '../press/OrderManager';
-import { WalkInOrder } from '../press/WalkInOrder';
-import { SettingsManager } from './SettingsManager';
-import { CustomerManager } from './CustomerManager';
-import { AdminReports } from './AdminReports';
-import { InventoryManager } from './InventoryManager';
 import { StockAlerts } from './StockAlerts';
-import { DocumentCenter } from '../press/documents/DocumentCenter';
-import { CustomerLedger } from '../press/ledger/CustomerLedger';
 import logo from '../../assets/logo in white.png';
 import '../../style/AdminPage.css';
 import '../../style/WorkspaceResponsive.css';
 
 interface Props { onNavigateHome: () => void; adminId?: number; user: AuthUser | null; }
 const links = [['Dashboard', FaLayerGroup], /* ['Smart Search', FaSearch], */ ['Orders', FaClipboardList], ['New walk-in order', FaClipboardList], ['Invoices & receipts', FaClipboardList], ['Products', FaBoxOpen], ['Create staff', FaUsers], ['Vendors', FaTruck], ['Customers', FaUsers], ['Customer ledger', FaClipboardList], ['Reports', FaChartLine], ['Settings', FaCog]] as const;
-
-function AdminAvatar({ profile }: { profile: AuthUser | null }) {
-  const [failedImage, setFailedImage] = useState<string | null>(null);
-  const name = profile?.full_name.trim() || 'Super Administrator';
-  const words = name.split(/\s+/);
-  const initials = (words[0][0] + (words.length > 1 ? words[words.length - 1][0] : '')).toUpperCase();
-  const image = profile?.profile_image;
-
-  return (
-    <span
-      className="d-inline-flex align-items-center justify-content-center rounded-circle overflow-hidden shadow-sm"
-      role="img"
-      aria-label={`${name}'s profile`}
-      title={name}
-      style={{
-        width: 42,
-        height: 42,
-        flexShrink: 0,
-        background: 'linear-gradient(135deg, #1b718d, #513b73)',
-        border: '2px solid #ffffffb3',
-        color: '#fff',
-        fontSize: 14,
-        fontWeight: 700,
-      }}
-    >
-      {image && image !== failedImage ? (
-        <img
-          src={image}
-          alt=""
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          onError={() => setFailedImage(image)}
-        />
-      ) : initials}
-    </span>
-  );
-}
 
 export const AdminPage = ({ onNavigateHome, adminId, user }: Props) => {
   const [section, setSection] = useState('Dashboard');
@@ -75,56 +30,6 @@ export const AdminPage = ({ onNavigateHome, adminId, user }: Props) => {
     setOrderNotice('');
   };
   const saveProfile = (saved: AuthUser) => { setProfile(saved); sessionStorage.setItem('blackeyes:user', JSON.stringify(saved)); };
-  let content;
-
-  switch (section) {
-    // case 'Smart Search':
-    //   content = <SmartSearch isAdmin />;
-    //   break;
-    case 'Customer ledger':
-      content = <CustomerLedger />;
-      break;
-    case 'Invoices & receipts':
-      content = <DocumentCenter />;
-      break;
-    case 'Dashboard':
-      content = <AdminReports key="dashboard" dashboard onNavigate={navigateToSection} />;
-      break;
-    case 'Reports':
-      content = <AdminReports key="reports" onNavigate={navigateToSection} />;
-      break;
-    case 'Customers':
-      content = <CustomerManager />;
-      break;
-    case 'Orders':
-      content = <>{orderNotice && <div className="alert alert-success" role="status">{orderNotice}</div>}<OrderManager onCreate={() => navigateToSection('New walk-in order')} /></>;
-      break;
-    case 'New walk-in order':
-      content = <WalkInOrder onCancel={() => navigateToSection('Orders')} onCreated={order => { setSection('Orders'); setOrderNotice(`Order #${order.order_id} created for ${order.customer_name}. It is ready for review.`); }} />;
-      break;
-    case 'Products':
-      content = <><ProductManager adminId={adminId} /><InventoryManager /></>;
-      break;
-    case 'Create staff':
-      content = <StaffManager adminId={adminId} />;
-      break;
-    case 'Vendors':
-      content = <VendorManager adminId={adminId} />;
-      break;
-    case 'Settings':
-      content = <SettingsManager adminId={adminId} user={profile} onSaved={saveProfile} />;
-      break;
-    default:
-      content = (
-        <div className="rounded-4 bg-white shadow-sm p-5">
-          <small className="text-info text-uppercase fw-bold">{section}</small>
-          <h1 className="mt-2">
-            {section === 'Dashboard' ? `Good morning, ${profile?.full_name ?? 'Admin'}.` : section}
-          </h1>
-          <p className="text-muted mb-0">This workspace is ready for the next module.</p>
-        </div>
-      );
-  }
   return (
     <main className="admin-workspace min-vh-100 d-flex" style={{ background: '#f4f7fb' }}>
       <Offcanvas responsive="lg" show={menu} onHide={() => setMenu(false)} id="admin-navigation" aria-label="Admin navigation"
@@ -256,7 +161,7 @@ export const AdminPage = ({ onNavigateHome, adminId, user }: Props) => {
           </div>
         </header>
         <StockAlerts section={section} onManage={() => navigateToSection('Products')} />
-        {content}
+        <AdminSection section={section} adminId={adminId} profile={profile} orderNotice={orderNotice} navigateToSection={navigateToSection} saveProfile={saveProfile} onOrderCreated={(id, name) => { setSection('Orders'); setOrderNotice(`Order #${id} created for ${name}. It is ready for review.`); }} />
       </section>
     </main>
   );

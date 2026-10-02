@@ -1,11 +1,9 @@
 """FastAPI application setup and database startup."""
 
-import os
+from config import load_settings
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from database import engine
-from models import Base
 from routers import (
     customer_portal,
     order_management,
@@ -19,7 +17,6 @@ from routers import (
     vendor,
     vendor_ledger,
 )
-from schemas import apply_schema_updates
 from routers import admin_customers, admin_inventory, admin_reports
 from routers import order_documents
 from routers import customer_ledger
@@ -28,14 +25,15 @@ from routers import wholesale
 from routers import vendor_invoice_ocr
 from routers import vendor_orders
 
+settings_config = load_settings()
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=settings_config.cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 for router in (
@@ -64,9 +62,4 @@ for router in (
     app.include_router(router)
 
 
-@app.on_event("startup")
-def startup():
-    """Create missing tables, then apply updates to existing tables."""
-    if os.getenv("VERCEL") != "1":
-        Base.metadata.create_all(bind=engine)
-        apply_schema_updates(engine)
+# Schema changes are applied explicitly with `alembic upgrade head` before deployment.

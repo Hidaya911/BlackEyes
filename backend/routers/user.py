@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from database import get_db
+from config import load_settings, reset_token_secret
 from models import User, UserSession
 from sessions import COOKIE_NAME, create_session, current_user, pwd_context, token_hash
 from services.profiles import profile_response
@@ -88,7 +89,7 @@ def logout(request: Request, response: Response, db: Session=Depends(get_db)):
     if token:
         db.query(UserSession).filter(UserSession.token_hash == token_hash(token)).delete()
         db.commit()
-    response.delete_cookie(COOKIE_NAME, path='/')
+    response.delete_cookie(COOKIE_NAME, path='/', secure=load_settings().cookie_secure, httponly=True, samesite='lax')
 
 
 @router.get('/api/auth/profile-image')
@@ -101,14 +102,14 @@ def get_profile_image(user_id: int, user: User = Depends(current_user)):
 
 def make_reset_token(email: str) -> str:
     payload = base64.urlsafe_b64encode(json.dumps({'email': email, 'expires': int(time.time()) + 3600}).encode()).decode().rstrip('=')
-    signature = hmac.new(os.getenv('RESET_TOKEN_SECRET', 'change-this-reset-secret').encode(), payload.encode(), hashlib.sha256).hexdigest()
+    signature = hmac.new(reset_token_secret(), payload.encode(), hashlib.sha256).hexdigest()
     return f'{payload}.{signature}'
 
 
 def read_reset_token(token: str) -> str:
     try:
         payload, signature = token.rsplit('.', 1)
-        expected = hmac.new(os.getenv('RESET_TOKEN_SECRET', 'change-this-reset-secret').encode(), payload.encode(), hashlib.sha256).hexdigest()
+        expected = hmac.new(reset_token_secret(), payload.encode(), hashlib.sha256).hexdigest()
         data = json.loads(base64.urlsafe_b64decode(payload + '=' * (-len(payload) % 4)))
         if not hmac.compare_digest(signature, expected) or data['expires'] < time.time():
             raise ValueError
@@ -125,7 +126,7 @@ def forgot_password(payload: PasswordResetRequest, db: Session=Depends(get_db)):
         message['Subject'] = 'Reset your Blackeyes password'
         message['From'] = os.getenv('SMTP_FROM', os.getenv('SMTP_USER', 'no-reply@blackeyes.local'))
         message['To'] = user.email
-        message.set_content(f"Use this one-hour reset link:\n\n{os.getenv('FRONTEND_URL', 'http://localhost:5173')}/?reset_token={make_reset_token(user.email)}")
+        message.set_content(f"Use this one-hour reset link:\n\n{load_settings().frontend_url}/?reset_token={make_reset_token(user.email)}")
         try:
             with smtplib.SMTP_SSL(os.getenv('SMTP_HOST', ''), int(os.getenv('SMTP_PORT', '465'))) as smtp:
                 smtp.login(os.environ['SMTP_USER'], os.environ['SMTP_PASSWORD'])

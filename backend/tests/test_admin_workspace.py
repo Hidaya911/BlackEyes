@@ -168,11 +168,11 @@ class AdminWorkspaceTests(unittest.TestCase):
         self.assertEqual(actual, expected)
         self.assertLessEqual(len(queries), 6)
 
-    def test_vercel_startup_does_not_run_schema_queries(self):
+    def test_startup_does_not_run_schema_queries(self):
         from unittest.mock import patch
-        from main import startup
-        with patch.dict(os.environ, {'VERCEL': '1'}), patch('main.Base.metadata.create_all') as create, patch('main.apply_schema_updates') as update:
-            startup()
+        with patch('database.Base.metadata.create_all') as create, patch('schemas.apply_schema_updates') as update:
+            with TestClient(app):
+                pass
             create.assert_not_called()
             update.assert_not_called()
 

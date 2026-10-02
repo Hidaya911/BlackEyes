@@ -1,80 +1,20 @@
 """API routes for supplier purchases, inventory receipts, and accounts payable."""
 
-from datetime import date
-from decimal import Decimal, ROUND_HALF_UP
-from typing import Literal
-from uuid import UUID, uuid4
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import func
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from access import require_admin
 from sessions import current_user
 from database import get_db
-from models import InventoryItem, InventoryTransaction, User, Vendor, VendorPayment, VendorPurchase, VendorOrder
+from models import InventoryItem, User, Vendor, VendorPayment, VendorPurchase
+
+from schemas.requests.vendor_ledger import PurchaseRequest, PaymentRequest, ExtractedPurchasesRequest
+from services.vendor_ledger import commit_ledger, save_purchase
 
 router = APIRouter(prefix="/api/admin", tags=["Vendor ledger"])
-MoneyMethod = Literal["cash", "bank_transfer", "whish_money", "other"]
-MAX_MONEY = Decimal("999999999999.99")
-MAX_QUANTITY = Decimal("99999999999.999")
-
-
-class LedgerRequest(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-    admin_id: int
-    request_key: UUID
-
-
-class PurchaseRequest(LedgerRequest):
-    item_id: int | None = Field(default=None, gt=0)
-    item_name: str = Field(default="", max_length=255)
-    item_type: Literal["paper", "ink", "other"] = "paper"
-    unit: str = Field(default="", max_length=30)
-    low_stock_threshold: Decimal = Field(default=Decimal(0), ge=0, max_digits=14, decimal_places=3)
-    quantity: Decimal = Field(gt=0, max_digits=14, decimal_places=3)
-    unit_price: Decimal = Field(ge=0, max_digits=18, decimal_places=6)
-    purchase_date: date
-    invoice_reference: str = Field(default="", max_length=100)
-    initial_payment: Decimal = Field(default=Decimal(0), ge=0, max_digits=14, decimal_places=2)
-    payment_method: MoneyMethod = "cash"
-
-    @field_validator("purchase_date")
-    @classmethod
-    def no_future_purchase(cls, value):
-        if value > date.today():
-            raise ValueError("Purchase date cannot be in the future.")
-        return value
-
-    @model_validator(mode="after")
-    def check_new_item(self):
-        if self.item_id is None and (not self.item_name or not self.unit):
-            raise ValueError("Item name and unit are required for a new inventory item.")
-        return self
-
-
-class PaymentRequest(LedgerRequest):
-    amount: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
-    payment_date: date
-    method: MoneyMethod = "cash"
-    reference: str = Field(default="", max_length=100)
-
-    @field_validator("payment_date")
-    @classmethod
-    def no_future_payment(cls, value):
-        if value > date.today():
-            raise ValueError("Payment date cannot be in the future.")
-        return value
-
-
-def commit_ledger(db: Session):
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=409, detail="This entry was already recorded or its linked record changed. Refresh the ledger before trying again.")
 
 
 @router.get("/vendor-ledger")
@@ -169,104 +109,6 @@ def get_ledger(admin_id: int, db: Session = Depends(get_db)):
 @router.post("/vendors/{vendor_id}/purchases", status_code=201)
 def create_purchase(vendor_id: int, payload: PurchaseRequest, db: Session = Depends(get_db)):
     return save_purchase(vendor_id, payload, db)
-
-
-def save_purchase(vendor_id, payload, db, commit=True, reuse_existing=False, order_id=None):
-    require_admin(payload.admin_id, db)
-    vendor = db.query(Vendor).filter(Vendor.vendor_id == vendor_id).with_for_update().first()
-    if not vendor:
-        raise HTTPException(status_code=404, detail="Vendor not found.")
-    if order_id is None:
-        order = None
-        if payload.invoice_reference:
-            order = db.query(VendorOrder).filter(VendorOrder.vendor_id == vendor_id,
-                VendorOrder.purchase_date == payload.purchase_date,
-                func.lower(VendorOrder.invoice_reference) == payload.invoice_reference.lower()).first()
-        if order is None:
-            order = VendorOrder(vendor_id=vendor_id, purchase_date=payload.purchase_date,
-                                invoice_reference=payload.invoice_reference or None, created_by=payload.admin_id)
-            db.add(order)
-            db.flush()
-        order_id = order.order_id
-    if db.query(VendorPurchase).filter(VendorPurchase.request_key == str(payload.request_key)).first():
-        raise HTTPException(status_code=409, detail="This purchase was already recorded. Refresh the ledger to see it.")
-    cost = (payload.quantity * payload.unit_price).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    if cost > MAX_MONEY:
-        raise HTTPException(status_code=422, detail="Purchase total is too large.")
-    if payload.initial_payment > cost:
-        raise HTTPException(status_code=422, detail="Payment cannot exceed the purchase total.")
-
-    if payload.item_id:
-        item = db.query(InventoryItem).filter(InventoryItem.item_id == payload.item_id).with_for_update().first()
-        if not item:
-            raise HTTPException(status_code=404, detail="Inventory item not found.")
-    else:
-        item = db.query(InventoryItem).filter(
-            func.lower(InventoryItem.name) == payload.item_name.lower(),
-            InventoryItem.type == payload.item_type,
-            func.lower(InventoryItem.unit) == payload.unit.lower(),
-        ).with_for_update().first()
-        if item and not reuse_existing:
-            raise HTTPException(status_code=409, detail="This inventory item already exists. Select it from existing items.")
-        if not item:
-            item = InventoryItem(name=payload.item_name, type=payload.item_type, unit=payload.unit.lower(),
-                                 low_stock_threshold=payload.low_stock_threshold, quantity_on_hand=Decimal(0))
-            db.add(item)
-
-    if item.quantity_on_hand + payload.quantity > MAX_QUANTITY:
-        raise HTTPException(status_code=422, detail="Resulting inventory quantity is too large.")
-    try:
-        db.flush()
-        purchase = VendorPurchase(
-            order_id=order_id,
-            vendor_id=vendor_id,
-            item_id=item.item_id,
-            quantity=payload.quantity,
-            unit_price=payload.unit_price,
-            cost=cost,
-            purchase_date=payload.purchase_date,
-            invoice_reference=payload.invoice_reference or None,
-            created_by=payload.admin_id,
-            request_key=str(payload.request_key),
-        )
-        db.add(purchase)
-        db.flush()
-        item.quantity_on_hand += payload.quantity
-        db.add(InventoryTransaction(
-            item_id=item.item_id,
-            purchase_id=purchase.purchase_id,
-            movement_type="add",
-            quantity=payload.quantity,
-            changed_by=payload.admin_id,
-        ))
-        if payload.initial_payment:
-            db.add(VendorPayment(
-                purchase_id=purchase.purchase_id,
-                amount=payload.initial_payment,
-                method=payload.payment_method,
-                payment_date=payload.purchase_date,
-                reference=payload.invoice_reference or None,
-                recorded_by=payload.admin_id,
-                request_key=str(uuid4()),
-            ))
-        if commit:
-            commit_ledger(db)
-        else:
-            db.flush()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=409, detail="A matching entry already exists. Refresh the ledger and select the existing item.")
-    return {"purchase_id": purchase.purchase_id}
-
-
-class ExtractedPurchasesRequest(BaseModel):
-    rows: list[PurchaseRequest] = Field(min_length=1, max_length=100)
-
-    @model_validator(mode='after')
-    def same_invoice(self):
-        if len({(row.purchase_date, row.invoice_reference) for row in self.rows}) != 1:
-            raise ValueError('All items must belong to the same invoice and purchase date.')
-        return self
 
 
 @router.post('/vendors/{vendor_id}/extracted-purchases', status_code=201)

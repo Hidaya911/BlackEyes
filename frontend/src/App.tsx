@@ -33,7 +33,8 @@ function AppContent() {
   const [page, setPage] = useState<Page>(getInitialPage);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
     const stored = sessionStorage.getItem(USER_KEY);
-    return stored ? JSON.parse(stored) as AuthUser : null;
+    try { return stored ? JSON.parse(stored) as AuthUser : null; }
+    catch { sessionStorage.removeItem(USER_KEY); return null; }
   });
 
   const navigate = (target: Page) => {
@@ -81,8 +82,14 @@ function AppContent() {
   }
   if (page === 'reset') return <ResetPasswordPage token={new URLSearchParams(window.location.search).get('reset_token') ?? ''} onLogin={goToLogin} />;
 
-  if (page === 'admin') return <AdminPage onNavigateHome={logout} adminId={currentUser?.user_id} user={currentUser} />;
-  if (page === 'staff') return <StaffPage onLogout={logout} onProfileSaved={saveCurrentProfile} />;
+  if (page === 'admin' || page === 'staff') {
+    // UI routing only; API endpoints must independently authorize the session.
+    if (!currentUser || currentUser.role !== page || currentUser.status !== 'active') {
+      return <LoginPage onLoginSuccess={handleLogin} onNavigateHome={goToHome} />;
+    }
+    if (page === 'admin') return <AdminPage onNavigateHome={logout} adminId={currentUser.user_id} user={currentUser} />;
+    return <StaffPage onLogout={logout} onProfileSaved={saveCurrentProfile} />;
+  }
   return <CustomerPage key={currentUser?.user_id ?? 'guest'} user={currentUser} onLogin={goToLogin} onSignup={goToSignup} onLogout={logout} onProfileSaved={saveCurrentProfile} />;
 }
 

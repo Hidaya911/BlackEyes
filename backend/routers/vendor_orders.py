@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import VendorOrder, VendorPurchase, VendorPayment, InventoryItem, InventoryTransaction, User
 from sessions import current_user
-from routers.vendor_ledger import PaymentRequest, commit_ledger
+from schemas.requests.vendor_ledger import PaymentRequest
+from services.vendor_ledger import commit_ledger
 
 router = APIRouter(prefix='/api/admin/vendor-orders', tags=['Vendor orders'])
 

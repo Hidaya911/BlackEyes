@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta, timezone
 import hashlib
 import secrets
-import os
+from config import load_settings
 
 from fastapi import Depends, HTTPException, Request, Response
 from passlib.context import CryptContext
@@ -30,7 +30,7 @@ def create_session(user: User, response: Response, db: Session):
     db.commit()
     response.set_cookie(
         COOKIE_NAME, token, httponly=True, samesite="lax", max_age=7 * 86400,
-        secure=os.getenv("COOKIE_SECURE", "false").lower() == "true", path="/",
+        secure=load_settings().cookie_secure, path="/",
     )
 
 
