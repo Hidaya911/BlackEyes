@@ -16,7 +16,7 @@ export function Navbar({ onNavigateToLogin, onNavigateToSignup, user, cartCount 
   return <BootstrapNavbar expanded={expanded} expand="lg" className="storefront-nav bg-white py-3 border-bottom">
     <Container fluid className="px-3 px-lg-5" style={{ maxWidth: 1600 }}>
       <BootstrapNavbar.Brand href="#home" onClick={() => navigate('home')} className="d-flex align-items-center gap-3">
-        <img src={logo} alt="Blackeyes" style={{ height: 40 }} />
+        <img src={logo} alt="Blackeyes" className="storefront-navbar-logo" />
         <span className="storefront-brand-caption d-none d-xl-block">PRESS & PRINT CO<br />BLACKEYES</span>
       </BootstrapNavbar.Brand>
       <div className="storefront-nav-actions order-lg-3">

@@ -24,3 +24,5 @@ playwright-report
 *.njsproj
 *.sln
 *.sw?
+# Generated from locked npm dependencies before dev/build.
+/public/ocr/

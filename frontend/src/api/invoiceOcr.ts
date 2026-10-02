@@ -9,10 +9,14 @@ export interface ParsedInvoice {
   subtotal?: string | null; tax?: string | null;
   raw_text: string; text_confidence: number; engine: string; suggested_vendor_id: number | null;
 }
-export async function parseVendorInvoice(file: File, signal: AbortSignal): Promise<ParsedInvoice> {
-  const response = await fetch('/api/admin/vendor-invoices/parse', {
+export async function parseVendorInvoice(file: File, signal: AbortSignal, progress?: (message: string) => void): Promise<ParsedInvoice> {
+  const { recognizeInvoice } = await import('../utils/browserInvoiceOcr');
+  const passes = await recognizeInvoice(file, signal, progress);
+  signal.throwIfAborted();
+  progress?.('Matching invoice items and vendor…');
+  const response = await fetch('/api/admin/vendor-invoices/parse-text', {
     method: 'POST', credentials: 'same-origin', signal,
-    headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file,
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ passes }),
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(typeof body.detail === 'string' ? body.detail : 'Unable to read this invoice. Please retry.');

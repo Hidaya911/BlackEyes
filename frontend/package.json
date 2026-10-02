@@ -4,6 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/prepare-ocr.mjs",
+    "prebuild": "node scripts/prepare-ocr.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "dev": "vite",
@@ -12,13 +14,15 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tesseract.js-data/eng": "^1.0.0",
     "axios": "^1.20.0",
     "bootstrap": "^5.3.8",
     "html2pdf.js": "^0.14.0",
     "react": "^19.2.8",
     "react-bootstrap": "^2.10.10",
     "react-dom": "^19.2.8",
-    "react-icons": "^5.7.0"
+    "react-icons": "^5.7.0",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^7.0.1",

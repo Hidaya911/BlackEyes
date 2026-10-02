@@ -1,5 +1,12 @@
 .storefront { min-height:100vh; background:#fff; color:#121723; --studio-ink:#182a40; --studio-muted:#64748b; --studio-accent:#087c9a; }
 .storefront-nav { z-index:1030; }
+.storefront-navbar-logo { display:block; height:40px; width:auto; object-fit:contain; }
+@media(max-width:1199px) { .storefront-navbar-logo { height:64px; } }
+@media(max-width:767px) { .storefront-navbar-logo { height:56px; } }
+@media(max-width:575px) {
+  .storefront-nav .navbar-brand { flex-basis:100%; justify-content:center; margin-right:0; }
+  .storefront-nav-actions { width:100%; justify-content:center; margin-top:8px; }
+}
 .storefront-brand-caption { border-left:1px solid #dde3e9; padding-left:18px; font:11px/1.5 monospace; letter-spacing:1.3px; color:#657180; }
 .storefront-nav-actions { display:flex; align-items:center; gap:18px; }
 .storefront-basket { position:relative; border:0; background:transparent; padding:10px; color:#475569; font-size:20px; }
@@ -45,7 +52,7 @@
 .order-card-progress small { color:#697888; font-size:11px; }
 @media(max-width:1199px) { .storefront .customer-product-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } .storefront-nav-actions { gap:10px; } }
 @media(max-width:767px) { .storefront .customer-product-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .order-studio-hero { grid-template-columns:1fr; padding:32px 24px; gap:35px; } .order-studio-ticket { max-width:350px; transform:rotate(2deg); } .storefront-products { padding-top:45px; } }
-@media(max-width:480px) { .storefront .customer-product-grid { grid-template-columns:1fr; } .storefront-nav-actions { gap:6px; } .storefront-nav .navbar-brand { margin-right:8px; } .storefront-nav .navbar-brand img { max-width:58px; object-fit:contain; } .storefront-nav-actions .btn { font-size:12px; } }
+@media(max-width:480px) { .storefront .customer-product-grid { grid-template-columns:1fr; } .storefront-nav-actions { gap:6px; } .storefront-nav .navbar-brand { margin-right:8px; } .storefront-nav-actions .btn { font-size:12px; } }
 @media(prefers-reduced-motion:reduce) { .storefront .customer-product-card { transition:none; } }
 
 /* The print edit: generous imagery, paper tones and the studio's ink colours. */

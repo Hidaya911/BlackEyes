@@ -20,6 +20,7 @@ export function VendorInvoiceParser({ adminId, vendors, items, purchases, onSave
   const [reference, setReference] = useState('');
   const [date, setDate] = useState('');
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState('');
   const [saving, setSaving] = useState(false);
   const saveLock = useRef(false);
   const [error, setError] = useState('');
@@ -41,7 +42,9 @@ export function VendorInvoiceParser({ adminId, vendors, items, purchases, onSave
     request.current?.abort(); const controller = new AbortController(); request.current = controller;
     setBusy(true); setError('');
     try {
-      const parsed = await parseVendorInvoice(file, controller.signal);
+      const parsed = await parseVendorInvoice(file, controller.signal, message => {
+        if (!controller.signal.aborted) setProgress(message);
+      });
       if (controller.signal.aborted) return;
       setInvoice(parsed); setReference(parsed.invoice_reference); setDate(parsed.purchase_date);
       setVendor(parsed.suggested_vendor_id ? String(parsed.suggested_vendor_id) : '');
@@ -89,7 +92,7 @@ export function VendorInvoiceParser({ adminId, vendors, items, purchases, onSave
       <label className="invoice-upload"><FaUpload aria-hidden="true" /><strong>{file?.name || 'Choose an invoice photo or scan'}</strong><small>JPEG, PNG or WebP · up to 8 MB / 16 megapixels</small><input aria-label="Invoice image" type="file" accept="image/jpeg,image/png,image/webp" disabled={busy || !!selected} onChange={event => chooseFile(event.target.files?.[0])} /></label>
       <div className="invoice-upload-action"><button className="btn vendor-primary" disabled={!file || busy || !!invoice} onClick={() => void extract()}><FaMagic className="me-2" />{busy ? 'Reading invoice…' : invoice ? 'Invoice analyzed' : 'Extract invoice'}</button><small>Processed locally. Review before saving.</small></div>
     </div>
-    {busy && <p role="status" className="invoice-progress">Reading text and locating item amounts… This may take up to 30 seconds.</p>}
+    {busy && <p role="status" className="invoice-progress">{progress || 'Preparing invoice reader…'}</p>}
     {error && <div className="alert alert-danger" role="alert">{error}</div>}
     {invoice && <div className="invoice-review-grid">
       <aside className="invoice-original"><h3>Original invoice</h3>{preview && <a href={preview} target="_blank" rel="noreferrer" aria-label="Open full invoice image"><img src={preview} alt="Uploaded vendor invoice for comparison" /></a>}<small>Open the image to inspect the original.</small><details><summary>Extracted text</summary><pre>{invoice.raw_text}</pre></details></aside>
