@@ -13,7 +13,13 @@
 .storefront-basket span { position:absolute; top:0; right:-5px; border-radius:20px; background:#ed0083; color:white; min-width:18px; padding:1px 4px; font-size:10px; }
 .storefront-profile-toggle { display:flex; align-items:center; gap:10px; border-radius:50px; min-height:42px; border:1px solid #dbe3eb; padding:8px 14px; }
 .storefront-profile-toggle img { width:26px; height:26px; object-fit:cover; border-radius:50%; }
-.storefront-profile-menu { min-width:250px; padding:12px 0; border:1px solid #e4e9ef; border-radius:18px; box-shadow:0 18px 50px #15213620; }
+.storefront-nav .storefront-profile-menu { left:auto; right:0; width:250px; min-width:0; max-width:calc(100vw - 32px); padding:12px 0; border:1px solid #e4e9ef; border-radius:18px; box-shadow:0 18px 50px #15213620; }
+.storefront-profile-menu strong { overflow-wrap:anywhere; }
+@media(max-width:575px) {
+  .storefront-nav-actions { position:relative; }
+  .storefront-nav-actions > .dropdown { position:static; }
+  .storefront-nav .storefront-profile-menu { top:100%; right:50%; transform:translateX(50%); }
+}
 .storefront-profile-menu .dropdown-item { padding:11px 18px; display:flex; align-items:center; gap:12px; }
 .storefront-role { display:inline-block; margin:8px 0; padding:5px 10px; border-radius:30px; color:#155d73; background:#e2f5fa; font-size:11px; font-weight:700; letter-spacing:.4px; }
 .storefront-role.is-wholesale { background:#fff1bd; color:#725411; }
